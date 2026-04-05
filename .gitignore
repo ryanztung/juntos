@@ -1,0 +1,11 @@
+# Claude
+.claude/
+
+# Env files
+*.env
+
+# DS_store files
+**/.DS_Store
+
+# pycache
+__pycache__/
