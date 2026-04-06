@@ -3,6 +3,7 @@
 
 # Env files
 *.env
+*.venv
 
 # DS_store files
 **/.DS_Store
