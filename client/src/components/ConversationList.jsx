@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import ProfilePanel from './UserProfile'
+
 
 const styles = `
   .cl-sidebar {
-    width: 260px;
-    min-width: 260px;
+    width: 300px;
+    min-width: 300px;
     background: #FFFCF6;
     border-right: 1px solid #B9B9B9;
     display: flex;
@@ -18,6 +20,13 @@ const styles = `
     border-bottom: 1px solid #B9B9B9;
     flex-shrink: 0;
     background: #F3EFE8;
+  }
+  .cl-header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    height: 36px;
   }
   .cl-header-title {
     font-size: 20px;
@@ -464,7 +473,10 @@ export default function ConversationList({ user, activeConversationId, onSelect,
       )}
       <aside className="cl-sidebar">
         <div className="cl-header">
-          <img src="/juntos-logo.png" alt="juntos" style={{ height: '32px', width: 'auto', marginBottom: '16px' }} />
+          <div className="cl-header-top">
+            <img src="/juntos-logo.png" alt="juntos" style={{ height: '100%', width: 'auto', display: 'block' }} />
+            <ProfilePanel user={user} />
+          </div>
           <button className="cl-new-btn" onClick={() => setShowCreateGroup(true)}>
             New Group Chat
           </button>

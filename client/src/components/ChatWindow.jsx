@@ -1176,9 +1176,16 @@ export default function ChatWindow({ user, conversationId, isGroup }) {
         return
       }
     }
+    const { data: senderProfile } = await supabase
+      .from('user_profiles')
+      .select('avatar_url')
+      .eq('id', user.id)
+      .maybeSingle()
+
     const { error: insertErr } = await supabase.from('messages').insert({
       conversation_id: conversationId, role: 'user', content: text,
       is_agent: false, sender_id: user.id, sender_display_name: displayName,
+      sender_avatar_url: senderProfile?.avatar_url ?? null,
       attachments,
     })
     if (insertErr) { setSendError(insertErr.message || 'Failed to send.'); return }
@@ -1325,7 +1332,7 @@ export default function ChatWindow({ user, conversationId, isGroup }) {
             {/* Invite button — opens drawer scrolled to invite form */}
             {isGroup && (
               <button className="cw-invite-btn" onClick={() => setShowDrawer(true)}>
-                + Invite
+                Invite
               </button>
             )}
           </div>
