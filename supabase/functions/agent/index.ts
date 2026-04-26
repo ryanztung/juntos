@@ -18,9 +18,11 @@ function corsResponse(body: string | null, status = 200) {
 
 function _stripTrailingSourcesBlock(text: string): string {
   if (!text) return text;
-  const idx = text.lastIndexOf("\n\nSources:");
-  if (idx === -1) return text;
-  return text.slice(0, idx).trimEnd();
+
+  return text
+    .replace(/\n?\n?Sources:[\s\S]*$/i, "")
+    .replace(/\n?\n?(REDDIT|GOOGLE|YELP|TRIPADVISOR):.*$/gim, "")
+    .trim();
 }
 
 function _inlineSourceTags(text: string, citations: string | null): string {
@@ -153,11 +155,30 @@ const TOOL_DECLARATIONS = [
       required: ["query", "city"],
     },
   },
+  {
+    name: "search_flights",
+    description: "Search for real-time flight prices and availability between two airports. Use this this whenever the user asks about flights, flight prices, or routes. Extract IATA airport codes from city names when needed (e.g. Los Angeles = LAX, New York = JFK, Maui = OGG).",
+    parameters: {
+      type: "object",
+      properties: {
+        from_airport: { type: "string", description: "Origin IATA airport code, e.g. LAX" },
+        to_airport: { type: "string", description: "Destination IATA airport code, e.g. JFK" },
+        date: { type: "string", description: "Departure date in YYYY-MM-DD format" },
+        return_date: { type: "string", description: "Return date in YYYY-MM-DD format for round trips (optional)" },
+        adults: { type: "number", description: "Number of adult passengers (default 1)" },
+        children: { type: "number", description: "Number of child passengers (default 0)" },
+        seat: { type: "string", description: "Seat class: economy, business, or first (default economy)" },
+      },
+      required: ["from_airport", "to_airport", "date"],
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
 // Tool implementations
 // ---------------------------------------------------------------------------
+
+// Itinerary creation
 function createItinerary(args: {
   destination: string;
   days: number;
@@ -200,9 +221,7 @@ function createItinerary(args: {
   };
 }
 
-// ---------------------------------------------------------------------------
 // RAG: search traveler reviews via pgvector
-// ---------------------------------------------------------------------------
 async function searchReviews(
   args: { query: string; city: string; count?: number; category?: string },
   openaiApiKey: string | undefined,
@@ -312,6 +331,43 @@ async function searchReviews(
   };
 }
 
+// Live flight scraping
+async function searchFlights(
+  args: {
+    from_airport: string;
+    to_airport: string;
+    date: string;
+    return_date?: string;
+    adults?: number;
+    children?: number;
+    seat?: string;
+  },
+  flightServiceUrl: string
+): Promise<unknown> {
+  try {
+    const res = await fetch(`${flightServiceUrl}/search`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from_airport: args.from_airport.toUpperCase(),
+        to_airport: args.to_airport.toUpperCase(),
+        date: args.date,
+        return_date: args.return_date ?? null,
+        adults: args.adults ?? 1,
+        children: args.children ?? 0,
+        seat: args.seat ?? "economy",
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      return { error: `Flight service error: ${err}` };
+    }
+    return await res.json();
+  } catch (e) {
+    return { error: `Could not reach flight service: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Gemini API call
 // ---------------------------------------------------------------------------
@@ -357,6 +413,7 @@ Deno.serve(async (req: Request) => {
     // --- Environment variables ---
     const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    const FLIGHT_SERVICE_URL = Deno.env.get("FLIGHT_SERVICE_URL") ?? "http://localhost:8000";
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "https://nigvyotnrlgbqeeyueql.supabase.co";
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
@@ -422,6 +479,9 @@ Deno.serve(async (req: Request) => {
 
     // Strip @travel-agent prefix before sending to Gemini
     const cleanedMessage = user_message.replace(/^@travel-agent\s*/i, "").trim();
+
+    // Check if request is flight-related
+    const isFlightQuery = /(flight|fly|airfare|ticket|route|airport)/i.test(cleanedMessage);
 
     // --- Save user message ---
     // For group chats the frontend writes the user message directly, so skip here to avoid duplicates.
@@ -522,32 +582,35 @@ ${ragInstruction}`;
     let systemInstructionWithRag = systemInstruction;
     let ragSourcesLine: string | null = null;
     let ragCitationsList: string | null = null;
-    try {
-      const cityForRag = "maui";
-      const wantsHotel = /(where\s+to\s+stay|hotel|resort|condo|airbnb|accommodation|lodging|vacation\s+rental|hostel)/i.test(cleanedMessage);
-      const ragResult = await searchReviews(
-        { query: cleanedMessage, city: cityForRag, count: 15, category: wantsHotel ? "hotel" : undefined },
-        OPENAI_API_KEY,
-        SUPABASE_URL,
-        SUPABASE_SERVICE_ROLE_KEY
-      ) as { reviews_text?: string; error?: string; sources?: string[]; citations?: string };
 
-      if (ragResult?.error) {
-        console.error("Eager RAG retrieval error:", ragResult.error);
-      }
+    if (!isFlightQuery) {
+      try {
+        const cityForRag = "maui";
+        const wantsHotel = /(where\s+to\s+stay|hotel|resort|condo|airbnb|accommodation|lodging|vacation\s+rental|hostel)/i.test(cleanedMessage);
+        const ragResult = await searchReviews(
+          { query: cleanedMessage, city: cityForRag, count: 15, category: wantsHotel ? "hotel" : undefined },
+          OPENAI_API_KEY,
+          SUPABASE_URL,
+          SUPABASE_SERVICE_ROLE_KEY
+        ) as { reviews_text?: string; error?: string; sources?: string[]; citations?: string };
 
-      if (ragResult?.reviews_text) {
-        systemInstructionWithRag = `${systemInstruction}\n\n${ragResult.reviews_text}`;
-      }
+        if (ragResult?.error) {
+          console.error("Eager RAG retrieval error:", ragResult.error);
+        }
 
-      if (ragResult?.sources && ragResult.sources.length > 0) {
-        ragSourcesLine = `Sources: ${ragResult.sources.join(", ")}`;
+        if (ragResult?.reviews_text) {
+          systemInstructionWithRag = `${systemInstruction}\n\n${ragResult.reviews_text}`;
+        }
+
+        if (ragResult?.sources && ragResult.sources.length > 0) {
+          ragSourcesLine = `Sources: ${ragResult.sources.join(", ")}`;
+        }
+        if (ragResult?.citations) {
+          ragCitationsList = ragResult.citations;
+        }
+      } catch (e) {
+        console.error("Eager RAG retrieval failed:", e);
       }
-      if (ragResult?.citations) {
-        ragCitationsList = ragResult.citations;
-      }
-    } catch (e) {
-      console.error("Eager RAG retrieval failed:", e);
     }
 
     // --- Map history to Gemini contents ---
@@ -646,6 +709,12 @@ ${ragInstruction}`;
 
         try {
           switch (name) {
+            case "search_flights":
+              toolResult = await searchFlights(
+                args as Parameters<typeof searchFlights>[0],
+                FLIGHT_SERVICE_URL
+              );
+              break;
             case "create_itinerary":
               toolResult = createItinerary(args as Parameters<typeof createItinerary>[0]);
               break;
@@ -683,7 +752,13 @@ ${ragInstruction}`;
     if (finalAssistantText) {
       finalAssistantText = _stripTrailingSourcesBlock(finalAssistantText);
       finalAssistantText = _inlineSourceTags(finalAssistantText, ragCitationsList);
-      if (ragSourcesLine || ragCitationsList) {
+
+      if (isFlightQuery) {
+        finalAssistantText = _stripTrailingSourcesBlock(finalAssistantText);
+      }
+      
+      const usedRag = !isFlightQuery && (ragSourcesLine || ragCitationsList);
+      if (usedRag) {
         const parts: string[] = [];
         if (ragSourcesLine) parts.push(ragSourcesLine);
         if (ragCitationsList) parts.push(ragCitationsList);

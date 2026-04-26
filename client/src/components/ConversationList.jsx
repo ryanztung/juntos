@@ -16,7 +16,7 @@ const styles = `
     font-family: 'Cabin', sans-serif;
   }
   .cl-header {
-    padding: 20px 16px 12px;
+    padding: 0 16px 12px;
     border-bottom: 1px solid #B9B9B9;
     flex-shrink: 0;
     background: #F3EFE8;
@@ -25,8 +25,8 @@ const styles = `
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 16px;
-    height: 36px;
+    margin-bottom: 12px;
+    height: 66px;
   }
   .cl-header-title {
     font-size: 20px;
@@ -474,7 +474,7 @@ export default function ConversationList({ user, activeConversationId, onSelect,
       <aside className="cl-sidebar">
         <div className="cl-header">
           <div className="cl-header-top">
-            <img src="/juntos-logo.png" alt="juntos" style={{ height: '100%', width: 'auto', display: 'block' }} />
+            <img src="/juntos-logo.png" alt="juntos" style={{ height: '36px', width: 'auto', display: 'block' }} />
             <ProfilePanel user={user} />
           </div>
           <button className="cl-new-btn" onClick={() => setShowCreateGroup(true)}>

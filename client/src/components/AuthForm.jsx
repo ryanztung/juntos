@@ -185,7 +185,7 @@ export default function AuthForm() {
         <div className="auth-card">
           <div className="auth-logo">
             <div className="auth-logo-icon">✈️</div>
-            <div className="auth-logo-title">Travel Agent</div>
+            <div className="auth-logo-title">juntos</div>
             <div className="auth-logo-sub">Your AI-powered travel planning assistant</div>
           </div>
 
