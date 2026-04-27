@@ -25,6 +25,45 @@ function _stripTrailingSourcesBlock(text: string): string {
     .trim();
 }
 
+function _stripUnknownPriceTags(text: string): string {
+  if (!text) return text;
+
+  // Remove patterns like:
+  // - "Some Place: ?" (often at the start of a bullet/paragraph)
+  // - "Price: ?" (if the model uses an alternate format)
+  const withoutVenueUnknown = text.replace(
+    /(^|\n)([-*]\s*)?([^\n:]{2,120}):\s*\?(?=\s|$)/g,
+    "$1$2$3"
+  );
+
+  const withoutPriceUnknown = withoutVenueUnknown.replace(
+    /\bPrice:\s*\?\b/gi,
+    ""
+  );
+
+  // Normalize malformed price tags like "Place: <$$$->" or "Place: <$$$>" to "Place: $$$"
+  const normalizedBracketed = withoutPriceUnknown
+    .replace(/:\s*<\s*([$]{1,4})\s*[^>]*>/g, ": $1")
+    .replace(/:\s*\[\s*([$]{1,4})\s*[^\]]*\]/g, ": $1");
+
+  // If the model outputs extra non-$ chars after the dollars, strip them.
+  const normalizedTrailing = normalizedBracketed.replace(/:\s*([$]{1,4})[^$\n]*/g, ": $1");
+
+  return normalizedTrailing;
+}
+
+function _looksLikeBarePriceList(text: string): boolean {
+  if (!text) return false;
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  const priceOnlyLines = lines.filter((l) => /:\s*\${1,4}\s*$/.test(l));
+  if (priceOnlyLines.length < 3) return false;
+
+  // If most price lines have nothing after the dollar signs (no dash/summary), treat as bare list.
+  const hasSummaries = priceOnlyLines.some((l) => /:\s*\${1,4}\s+[-—]/.test(l));
+  const hasPriceWord = /\bPrice:\b/i.test(text);
+  return !hasSummaries && !hasPriceWord;
+}
+
 function _inlineSourceTags(text: string, citations: string | null): string {
   if (!text || !citations) return text;
 
@@ -520,6 +559,7 @@ Deno.serve(async (req: Request) => {
         `  - Trip style: ${p.trip_style ?? "Not specified"}`,
         `  - Morning pace: ${p.pace_morning ?? "Not specified"}`,
         `  - Evening pace: ${p.pace_evening ?? "Not specified"}`,
+        `  - Activity style: ${p.activity_style ?? "Not specified"}`,
         `  - Downtime preference: ${p.downtime ?? "Not specified"}`,
         `  - Accommodation preference: ${p.accommodation ?? "Not specified"}`,
         `  - Dietary restrictions: ${dietary}`,
@@ -565,7 +605,20 @@ Deno.serve(async (req: Request) => {
     }
 
     // --- Build system instruction ---
-    const ragInstruction = `\nYou have access to a real traveler reviews database currently loaded with reviews for Maui. Whenever a user asks about places, restaurants, hotels, beaches, or activities — especially in Maui — always call search_reviews to ground your recommendations in real traveler experiences. Use create_itinerary to build a structured day-by-day plan when the user is ready to finalize their trip.`;
+    const ragInstruction = `\nYou have access to a real traveler reviews database currently loaded with reviews for Maui. Whenever a user asks about places, restaurants, hotels, beaches, or activities — especially in Maui — always call search_reviews to ground your recommendations in real traveler experiences. Use create_itinerary to build a structured day-by-day plan when the user is ready to finalize their trip.
+
+When you recommend specific venues (restaurants, hotels, activities, etc.), write the same kind of review-rich recommendations you normally do (mention specific highlights from the provided snippets like dishes/drinks, vibe, service, views, reservations, etc.), and append a simple price tier tag in dollar signs.
+
+Use this exact format per venue entry:
+<Venue Name> (<optional area or source label>): <1-2 sentences grounded in the provided review snippets/citations> Price: $/$$/$$$/$$$$
+
+Do NOT output bare lists of venue names with only price tiers — every venue must include 1-2 concrete review details.
+
+Rules for price tiers:
+- Prefer to base $-$$$$ on the provided review snippets/citations when they include evidence (explicit $ signs, numeric prices, or clear language like "cheap", "budget", "affordable", "pricey", "upscale", "splurge", "luxury").
+- If snippets/citations do not contain clear evidence, you may infer a reasonable tier from the described vibe (e.g. "fine dining"/"luxury" -> $$$$, "upscale" -> $$$, "casual" -> $$, "food truck"/"cheap" -> $).
+- If still unclear, default to "$$".
+- Do not output "?" for price.`;
 
     const systemInstruction = is_group
       ? `You are a knowledgeable and friendly AI travel agent participating in a group travel planning chat. You were invoked by ${sender_display_name ?? "a group member"} using @travel-agent. Your goal is to plan a trip that works for everyone in the group — look for destinations, budgets, and activities that satisfy the whole group, and flag any conflicts (e.g. dietary restrictions, budget gaps) proactively.
@@ -750,8 +803,42 @@ ${ragInstruction}`;
 
     // --- Save assistant message ---
     if (finalAssistantText) {
+      // If the model returned a bare list of "Venue: $$$" lines, do a constrained rewrite pass
+      // to restore the review-rich blurbs while keeping the price tags.
+      if (_looksLikeBarePriceList(finalAssistantText)) {
+        try {
+          const rewriteInstruction = `Rewrite the following recommendations to include 1-2 sentences of concrete review details per venue, grounded in the provided snippets/citations. Keep the same venue names and keep the existing dollar-sign price tiers. Do not add new venues. Do not output a bare list; every venue must include a short review-based blurb.`;
+
+          const rewriteContents: GeminiContent[] = [
+            {
+              role: "user",
+              parts: [
+                {
+                  text:
+                    `${rewriteInstruction}\n\n--- Original draft ---\n${finalAssistantText}\n\n--- Available citations/snippets ---\n${ragCitationsList ?? "(none)"}`,
+                },
+              ],
+            },
+          ];
+
+          const rewriteResp = await callGemini(systemInstructionWithRag, rewriteContents, GEMINI_API_KEY);
+          const rewriteCandidate = rewriteResp.candidates?.[0];
+          const rewriteParts: GeminiPart[] = rewriteCandidate?.content?.parts ?? [];
+          const rewritten = rewriteParts
+            .filter((p) => p.text)
+            .map((p) => p.text)
+            .join("");
+          if (rewritten && rewritten.trim().length > 0) {
+            finalAssistantText = rewritten;
+          }
+        } catch (e) {
+          console.error("Rewrite pass failed:", e);
+        }
+      }
+
       finalAssistantText = _stripTrailingSourcesBlock(finalAssistantText);
       finalAssistantText = _inlineSourceTags(finalAssistantText, ragCitationsList);
+      finalAssistantText = _stripUnknownPriceTags(finalAssistantText);
 
       if (isFlightQuery) {
         finalAssistantText = _stripTrailingSourcesBlock(finalAssistantText);

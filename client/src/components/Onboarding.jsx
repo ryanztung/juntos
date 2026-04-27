@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 const QUESTIONS = [
@@ -11,9 +11,15 @@ const QUESTIONS = [
   },
   {
     key: 'budget',
-    title: 'What is your budget per person?',
+    title: 'What is your daily budget per person?',
     emoji: '💰',
-    options: ['Under $500', '$500–$1,500', '$1,500–$3,000', '$3,000+'],
+    help: 'Think food, activities, and accommodation — not flights.',
+    options: [
+    'Under $75/day',     
+    '$75–$150/day',       
+    '$150–$300/day',      
+    '$300+/day',          
+  ],
   },
   {
     key: 'destination',
@@ -38,6 +44,18 @@ const QUESTIONS = [
     title: 'What does your ideal vacation evening look like?',
     emoji: '🌙',
     options: ['Early night, fully rested', 'Out late, night owl', 'Depends on the day'],
+  },
+  {
+    key: 'activity_style',
+    title: 'How do you like to spend your days on a trip?',
+    emoji: '🗺️',
+    help: 'There\'s no right answer — this helps us suggest the right kind of activities.',
+    options: [
+      'Fully planned — I want a packed itinerary with guided tours and skip-the-line tickets',
+      'Mostly planned — a few anchored activities, but room to wander',
+      'Mix of both — mornings structured, afternoons free (or vice versa)',
+      'Go with the flow — I discover things organically and hate feeling like a tourist',
+    ],
   },
   {
     key: 'downtime',
@@ -104,6 +122,14 @@ const styles = `
   .ob-option.selected .ob-option-dot { border-color: #106C54; background: #106C54; }
   .ob-option-dot-inner { width: 7px; height: 7px; border-radius: 50%; background: #fff; display: none; }
   .ob-option.selected .ob-option-dot-inner { display: block; }
+  .ob-option-check {
+    width: 18px; height: 18px; border-radius: 4px; border: 2px solid #B9B9B9;
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    transition: border-color 0.15s, background 0.15s;
+    font-size: 12px; line-height: 1;
+    color: #fff;
+  }
+  .ob-option.selected .ob-option-check { border-color: #106C54; background: #106C54; }
   .ob-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
   .ob-btn {
     padding: 11px 24px; border-radius: 8px; font-size: 15px; font-weight: 600;
@@ -135,6 +161,7 @@ export default function Onboarding({ user, onComplete }) {
   const [answers, setAnswers] = useState({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const savingRef = useRef(false)
 
   const currentQuestion = QUESTIONS[step]
   const selectedOption = answers[currentQuestion.key]
@@ -197,7 +224,9 @@ export default function Onboarding({ user, onComplete }) {
 
   const handleFinish = async () => {
     if (!hasSelection()) return
+    if (savingRef.current) return
     setError('')
+    savingRef.current = true
     setLoading(true)
     try {
       const profile = { id: user.id }
@@ -213,13 +242,30 @@ export default function Onboarding({ user, onComplete }) {
       if (insertError) {
         setError(insertError.message)
       } else {
-        await supabase.auth.updateUser({ data: { onboarding_complete: true } })
+        try {
+          const { error: updateErr } = await supabase.auth.updateUser({ data: { onboarding_complete: true } })
+          if (updateErr) {
+            const msg = updateErr.message || ''
+            if (!msg.includes('lock:sb-') || !msg.includes('was released because another request stole it')) {
+              setError(updateErr.message)
+              return
+            }
+          }
+        } catch (e) {
+          const msg = e?.message || ''
+          if (!String(msg).includes('lock:sb-') || !String(msg).includes('was released because another request stole it')) {
+            setError('An unexpected error occurred.')
+            return
+          }
+        }
+
         onComplete()
       }
     } catch (e) {
       setError('An unexpected error occurred.')
     } finally {
       setLoading(false)
+      savingRef.current = false
     }
   }
 
@@ -255,7 +301,10 @@ export default function Onboarding({ user, onComplete }) {
               placeholder={currentQuestion.placeholder ?? ''}
               value={answers[currentQuestion.key] ?? ''}
               onChange={(e) => setAnswers((prev) => ({ ...prev, [currentQuestion.key]: e.target.value }))}
-              onKeyDown={(e) => { if (e.key === 'Enter' && hasSelection()) isLastStep ? handleFinish() : handleNext() }}
+              onKeyDown={(e) => {
+                if (loading) return
+                if (e.key === 'Enter' && hasSelection()) isLastStep ? handleFinish() : handleNext()
+              }}
               disabled={loading}
               autoFocus
             />
@@ -268,9 +317,15 @@ export default function Onboarding({ user, onComplete }) {
                   onClick={() => handleSelect(option)}
                   disabled={loading}
                 >
-                  <span className="ob-option-dot">
-                    <span className="ob-option-dot-inner" />
-                  </span>
+                  {currentQuestion.multi ? (
+                    <span className="ob-option-check">
+                      {isOptionSelected(option) ? '✓' : ''}
+                    </span>
+                  ) : (
+                    <span className="ob-option-dot">
+                      <span className="ob-option-dot-inner" />
+                    </span>
+                  )}
                   {option}
                 </button>
               ))}

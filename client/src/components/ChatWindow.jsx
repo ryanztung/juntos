@@ -363,24 +363,34 @@ function PollBubble({ pollMessage, messages, conversationId, currentUserId, curr
   }
 
   const voteMessages = messages.filter((m) => (m?.content || '').startsWith('__POLL_VOTE__'))
-  const votes = []
+  const latestVoteByUser = new Map()
   for (const m of voteMessages) {
     try {
       const v = JSON.parse((m.content || '').replace(/^__POLL_VOTE__/, ''))
-      if (v?.poll_id === poll.poll_id && typeof v?.option_index === 'number') {
-        votes.push({ user_id: m.sender_id, option_index: v.option_index })
+      if (v?.poll_id !== poll.poll_id) continue
+      if (typeof v?.option_index !== 'number') continue
+      if (v.option_index < 0 || v.option_index >= poll.options.length) continue
+
+      const prev = latestVoteByUser.get(m.sender_id)
+      const ts = new Date(m.created_at || v.created_at || 0).getTime()
+      if (!prev || ts >= prev.ts) {
+        latestVoteByUser.set(m.sender_id, { option_index: v.option_index, ts })
       }
     } catch {
       // ignore
     }
   }
 
-  const myVote = votes.find((v) => v.user_id === currentUserId)
-  const counts = poll.options.map((_, idx) => votes.filter((v) => v.option_index === idx).length)
+  const myVote = latestVoteByUser.get(currentUserId) || null
+  const counts = poll.options.map((_, idx) => {
+    let c = 0
+    for (const v of latestVoteByUser.values()) if (v.option_index === idx) c++
+    return c
+  })
   const total = counts.reduce((a, b) => a + b, 0)
 
   const castVote = async (optionIndex) => {
-    if (myVote) return
+    if (myVote?.option_index === optionIndex) return
     const vote = { poll_id: poll.poll_id, option_index: optionIndex, created_at: new Date().toISOString() }
     await supabase.from('messages').insert({
       conversation_id: conversationId,
@@ -410,16 +420,15 @@ function PollBubble({ pollMessage, messages, conversationId, currentUserId, curr
                 <button
                   key={idx}
                   onClick={() => castVote(idx)}
-                  disabled={!!myVote}
                   style={{
                     textAlign: 'left',
-                    cursor: myVote ? 'default' : 'pointer',
+                    cursor: 'pointer',
                     borderRadius: '10px',
                     padding: '8px 10px',
                     border: '1px solid #B9B9B9',
                     background: isMine ? '#106C54' : '#fff',
                     color: isMine ? '#fff' : '#0f172a',
-                    opacity: myVote && !isMine ? 0.75 : 1,
+                    opacity: !isMine && myVote ? 0.8 : 1,
                     fontFamily: 'Cabin, sans-serif'
                   }}
                 >
@@ -861,7 +870,7 @@ const styles = `
   }
 
   .cw-todos-banner {
-    margin: 0 24px 10px;
+    margin: 0 24px 12px;
     background: rgba(16,108,84,0.08);
     border: 1px solid rgba(16,108,84,0.25);
     color: #106C54;
@@ -1337,16 +1346,17 @@ export default function ChatWindow({ user, conversationId, isGroup }) {
             )}
           </div>
 
-          <div className="cw-messages">
-            {isGroup && (
-              <div className="cw-todos-banner" onClick={() => setTodosOpen(true)}>
-                <div>
-                  <div className="cw-todos-banner-title">Shared to-dos</div>
-                  <div className="cw-todos-banner-meta">{openTodoCount} open</div>
-                </div>
-                <div className="cw-todos-banner-meta">Click to view</div>
+          {isGroup && (
+            <div className="cw-todos-banner" onClick={() => setTodosOpen(true)}>
+              <div>
+                <div className="cw-todos-banner-title">Shared to-dos</div>
+                <div className="cw-todos-banner-meta">{openTodoCount} open</div>
               </div>
-            )}
+              <div className="cw-todos-banner-meta">Click to view</div>
+            </div>
+          )}
+
+          <div className="cw-messages">
             {loadingMessages ? (
               <div className="cw-empty"><div style={{ color: '#475569', fontSize: '14px' }}>Loading messages...</div></div>
             ) : visibleMessages.length === 0 && !isThinking ? (
