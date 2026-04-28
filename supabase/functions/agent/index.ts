@@ -618,14 +618,15 @@ Rules for price tiers:
 - Prefer to base $-$$$$ on the provided review snippets/citations when they include evidence (explicit $ signs, numeric prices, or clear language like "cheap", "budget", "affordable", "pricey", "upscale", "splurge", "luxury").
 - If snippets/citations do not contain clear evidence, you may infer a reasonable tier from the described vibe (e.g. "fine dining"/"luxury" -> $$$$, "upscale" -> $$$, "casual" -> $$, "food truck"/"cheap" -> $).
 - If still unclear, default to "$$".
-- Do not output "?" for price.`;
+- Do not output "?" for price.
+- Always use consistent markdown formatting`;
 
     const systemInstruction = is_group
       ? `You are a knowledgeable and friendly AI travel agent participating in a group travel planning chat. You were invoked by ${sender_display_name ?? "a group member"} using @travel-agent. Your goal is to plan a trip that works for everyone in the group — look for destinations, budgets, and activities that satisfy the whole group, and flag any conflicts (e.g. dietary restrictions, budget gaps) proactively.
 
 ${profileBlock}
 ${ragInstruction}`
-      : `You are a knowledgeable and friendly AI travel agent. Help users plan their trips by searching for flights, hotels, activities, and providing personalized recommendations.
+      : `You are a knowledgeable and friendly AI travel agent. Help users plan their trips by searching for flights, hotels, activities, and providing personalized recommendations. Always use consistent markdown formatting
 
 ${profileBlock}
 ${ragInstruction}`;
@@ -655,10 +656,12 @@ ${ragInstruction}`;
           systemInstructionWithRag = `${systemInstruction}\n\n${ragResult.reviews_text}`;
         }
 
-        if (ragResult?.sources && ragResult.sources.length > 0) {
+        if (
+          ragResult?.reviews_text &&
+          ragResult?.sources && ragResult.sources.length > 0 &&
+          ragResult?.citations && ragResult.citations.trim().length > 0
+        ) {
           ragSourcesLine = `Sources: ${ragResult.sources.join(", ")}`;
-        }
-        if (ragResult?.citations) {
           ragCitationsList = ragResult.citations;
         }
       } catch (e) {
@@ -837,19 +840,35 @@ ${ragInstruction}`;
       }
 
       finalAssistantText = _stripTrailingSourcesBlock(finalAssistantText);
-      finalAssistantText = _inlineSourceTags(finalAssistantText, ragCitationsList);
       finalAssistantText = _stripUnknownPriceTags(finalAssistantText);
 
-      if (isFlightQuery) {
-        finalAssistantText = _stripTrailingSourcesBlock(finalAssistantText);
-      }
-      
-      const usedRag = !isFlightQuery && (ragSourcesLine || ragCitationsList);
-      if (usedRag) {
-        const parts: string[] = [];
-        if (ragSourcesLine) parts.push(ragSourcesLine);
-        if (ragCitationsList) parts.push(ragCitationsList);
-        finalAssistantText = `${finalAssistantText}\n\n${parts.join("\n")}`;
+      // Only inline source tags when RAG is used
+      const ragCitedLocations = ragCitationsList
+        ? ragCitationsList
+            .split("\n")
+            .map((l) => {
+              const m = l.match(/^[-*]?\s*[A-Z0-9_]+:\s*(.+?)\s*\(/)
+              return m ? m[1].trim() : null
+            })
+            .filter(Boolean) as string[]
+        : []
+
+      const isVenueQuery = /(restaurant|hotel|beach|eat|food|stay|activity|attraction|bar|café|cafe|resort|hike|snorkel|surf)/i.test(cleanedMessage)
+
+      const responseActuallyUsedRag =
+        !isFlightQuery &&
+        (!is_group || isVenueQuery) &&
+        ragSourcesLine !== null &&
+        ragCitationsList !== null &&
+        ragCitedLocations.length > 0 &&
+        ragCitedLocations.some((loc) => finalAssistantText.includes(loc))
+
+      if (responseActuallyUsedRag) {
+        finalAssistantText = _inlineSourceTags(finalAssistantText, ragCitationsList)
+        const sourceParts: string[] = []
+        if (ragSourcesLine) sourceParts.push(ragSourcesLine)
+        if (ragCitationsList) sourceParts.push(ragCitationsList)
+        finalAssistantText = `${finalAssistantText}\n\n${sourceParts.join("\n")}`
       }
       const { error: insertAssistantError } = await serviceClient
         .from("messages")
