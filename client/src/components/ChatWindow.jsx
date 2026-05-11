@@ -1760,6 +1760,35 @@ export default function ChatWindow({ user, conversationId, isGroup }) {
     return true
   }
 
+  const addTodoFromSuggestion = async (text) => {
+    const task = (text || '').trim()
+    if (!task) return false
+    const displayName = userDisplayName || user.email.split('@')[0]
+    const payload = {
+      todo_id: crypto.randomUUID(),
+      text: task,
+      created_at: new Date().toISOString(),
+      created_by: user.id,
+      created_by_name: displayName,
+      assignee_user_id: null,
+      assignee_display_name: null,
+      due_date: null,
+    }
+    const { error } = await supabase.from('messages').insert({
+      conversation_id: conversationId,
+      role: 'user',
+      content: `__TODO__${JSON.stringify(payload)}`,
+      is_agent: false,
+      sender_id: user.id,
+      sender_display_name: displayName,
+    })
+    if (error) {
+      setSendError(error.message || 'Failed to add to-do.')
+      return false
+    }
+    return true
+  }
+
   return (
     <>
       <style>{styles}</style>
@@ -1846,6 +1875,7 @@ export default function ChatWindow({ user, conversationId, isGroup }) {
                       isGroup={isGroup}
                       currentUserId={user.id}
                       onAddToItinerary={addToItinerary}
+                      onAddTodo={addTodoFromSuggestion}
                       reactions={reactionsByMessage[msg.id] || {}}
                       onReact={reactToMessage}
                     />

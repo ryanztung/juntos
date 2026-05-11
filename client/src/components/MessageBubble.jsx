@@ -273,7 +273,41 @@ function extractItinerarySuggestions(content) {
     .slice(0, 12)
 }
 
-export default function MessageBubble({ message, isGroup, currentUserId, onAddToItinerary, reactions = {}, onReact }) {
+function cleanTaskText(text) {
+  return stripMarkdown(text || '')
+    .replace(/\b(?:please|also|we should|should we|what if we|maybe we|we could|could we|can someone|who can|can we|we need to|need to|remember to|make sure to)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[,.;:\-\s]+|[,.;:\-\s]+$/g, '')
+    .trim()
+}
+
+function extractTodoSuggestions(content) {
+  const raw = (content || '').split(/\n\s*(?:#{1,6}\s*)?(?:sources|citations|references)\s*:?\s*\n/i)[0] || ''
+  const taskPatterns = [
+    /\b(?:need to|we need to|we should|should we|what if we|maybe we|we could|could we|can we|remember to|make sure to|don't forget to|dont forget to)\s+([^.!?\n]{4,110})/gi,
+    /\b(?:can someone|could someone|someone should|who can|who wants to|does anyone want to|anyone want to)\s+([^.!?\n]{4,110})/gi,
+    /\b(?:book|reserve|call|confirm|plan|schedule|buy|purchase|rent|message|email|check|apply for|pack)\s+([^.!?\n]{4,110})/gi,
+    /\b(?:make|get|grab|find)\s+(?:a\s+)?(?:reservation|booking|appointment|tickets?|ride|shuttle|rental car|table)\s+(?:for|at|to)?\s*([^.!?\n]{3,100})/gi,
+  ]
+
+  const suggestions = []
+  for (const pattern of taskPatterns) {
+    for (const match of raw.matchAll(pattern)) {
+      const prefix = match[0].slice(0, Math.max(0, match[0].length - match[1].length)).trim()
+      const task = cleanTaskText(`${prefix} ${match[1]}`)
+      if (!task) continue
+      if (task.length < 6 || task.length > 140) continue
+      if (/\b(source|sources|citation|citations|reference|google|reddit|review|preference summary)\b/i.test(task)) continue
+      suggestions.push(task.charAt(0).toUpperCase() + task.slice(1))
+    }
+  }
+
+  return suggestions
+    .filter((task, index, arr) => arr.findIndex((x) => x.toLowerCase() === task.toLowerCase()) === index)
+    .slice(0, 8)
+}
+
+export default function MessageBubble({ message, isGroup, currentUserId, onAddToItinerary, onAddTodo, reactions = {}, onReact }) {
   const isAgent = message.is_agent || message.role === 'assistant'
   const isOwn = !isAgent && message.sender_id === currentUserId
   const [savedTitles, setSavedTitles] = useState(new Set())
@@ -291,11 +325,19 @@ export default function MessageBubble({ message, isGroup, currentUserId, onAddTo
 
   const showAvatar = isAgent || (!isOwn && (isGroup || isAgent))
   const suggestions = (isAgent || isGroup) && onAddToItinerary ? extractItinerarySuggestions(message.content) : []
+  const todoSuggestions = (isAgent || isGroup) && onAddTodo ? extractTodoSuggestions(message.content) : []
 
   const handleAdd = async (item) => {
     const ok = await onAddToItinerary(item)
     if (ok !== false) {
       setSavedTitles((prev) => new Set([...prev, item.title]))
+    }
+  }
+
+  const handleAddTodo = async (text) => {
+    const ok = await onAddTodo(text)
+    if (ok !== false) {
+      setSavedTitles((prev) => new Set([...prev, `todo:${text}`]))
     }
   }
 
@@ -332,6 +374,25 @@ export default function MessageBubble({ message, isGroup, currentUserId, onAddTo
                     title={item.title}
                   >
                     {saved ? '✓' : '+'} {item.title}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          {todoSuggestions.length > 0 && (
+            <div className="mb-itinerary-actions">
+              <span className="mb-itinerary-label">To-do</span>
+              {todoSuggestions.map((task) => {
+                const saved = savedTitles.has(`todo:${task}`)
+                return (
+                  <button
+                    key={task}
+                    className="mb-itinerary-btn"
+                    onClick={() => handleAddTodo(task)}
+                    disabled={saved}
+                    title={task}
+                  >
+                    {saved ? '✓' : '+'} {task}
                   </button>
                 )
               })}
