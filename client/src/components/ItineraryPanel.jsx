@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 const DAY_COUNT = 5
+const DEFAULT_DAY_COUNT = 5
+const MAX_DAY_COUNT = 14
 const ICON_OPTIONS = [
   { label: 'Auto', value: 'AUTO' },
   { label: 'Food', value: '🍴' },
@@ -27,7 +29,7 @@ const styles = `
   .it-empty-icon { font-size: 42px; }
   .it-empty-title { font-size: 17px; font-weight: 700; color: #106C54; }
   .it-empty-sub { font-size: 13px; max-width: 380px; line-height: 1.45; }
-  .it-board { display: grid; grid-template-columns: repeat(5, minmax(245px, 1fr)); gap: 14px; min-width: 1220px; align-items: flex-start; }
+  .it-board { display: grid; grid-template-columns: repeat(var(--day-count), minmax(245px, 1fr)); gap: 14px; min-width: calc(var(--day-count) * 245px + (var(--day-count) - 1) * 14px); align-items: flex-start; }
   .it-day { background: #F3EFE8; border: 1px solid #B9B9B9; border-radius: 16px; min-height: 440px; display: flex; flex-direction: column; overflow: hidden; transition: border-color 0.15s ease, background 0.15s ease; }
   .it-day.drag-over { border-color: #106C54; background: rgba(16,108,84,0.08); }
   .it-day-head { padding: 14px; border-bottom: 1px solid #B9B9B9; display: flex; align-items: center; justify-content: space-between; background: rgba(16,108,84,0.05); }
@@ -36,14 +38,20 @@ const styles = `
   .it-day-items { padding: 12px; display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 360px; }
   .it-card { background: #FFFCF6; border: 1px solid rgba(185,185,185,0.75); border-radius: 14px; padding: 12px; cursor: grab; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
   .it-card:active { cursor: grabbing; }
+  .it-card-back { min-height: 150px; display: flex; flex-direction: column; gap: 9px; }
+  .it-card-back-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #106C54; font-size: 13px; font-weight: 800; }
   .it-card-title-row { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; }
   .it-card-emoji { width: 48px; height: 34px; border: 1px solid rgba(16,108,84,0.18); border-radius: 999px; background: rgba(16,108,84,0.1); flex-shrink: 0; font-size: 15px; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; text-align: center; outline: none; cursor: pointer; padding: 0 2px; }
   .it-card-emoji:hover { background: rgba(16,108,84,0.16); }
-  .it-card-title-input, .it-card-desc-input { width: 100%; border: 1px solid transparent; background: transparent; color: #106C54; font-family: 'Cabin', sans-serif; outline: none; border-radius: 8px; }
-  .it-card-title-input { font-size: 14px; font-weight: 800; }
-  .it-card-desc-input { font-size: 13px; color: #7A7A7A; line-height: 1.45; resize: vertical; min-height: 64px; }
+  .it-card-title-input, .it-card-desc-input { width: 100%; border: 1px solid transparent; background: transparent; color: #106C54; font-family: 'Cabin', sans-serif; outline: none; border-radius: 8px; overflow: hidden; }
+  .it-card-title-input { font-size: 14px; font-weight: 800; line-height: 1.25; resize: none; min-height: 36px; }
+  .it-card-desc-input { font-size: 13px; color: #7A7A7A; line-height: 1.45; resize: none; min-height: 84px; }
   .it-card-title-input:focus, .it-card-desc-input:focus { border-color: rgba(16,108,84,0.25); background: #fff; padding: 5px 7px; }
   .it-card-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 9px; }
+  .it-card-full-desc { color: #7A7A7A; font-size: 13px; line-height: 1.45; white-space: pre-wrap; background: rgba(243,239,232,0.7); border: 1px solid rgba(185,185,185,0.55); border-radius: 10px; padding: 10px; flex: 1; }
+  .it-full-text-btn { width: 100%; border: 1px dashed rgba(16,108,84,0.28); background: rgba(16,108,84,0.06); color: #106C54; border-radius: 10px; padding: 6px 8px; font-size: 12px; font-weight: 800; cursor: pointer; font-family: 'Cabin', sans-serif; margin-top: 6px; }
+  .it-full-text-btn:hover:not(:disabled) { background: rgba(16,108,84,0.11); }
+  .it-full-text-btn:disabled { opacity: 0.45; cursor: default; }
   .it-price { font-size: 11px; color: #659B90; font-weight: 800; }
   .it-controls { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; align-items: center; }
   .it-btn { border: 1px solid #B9B9B9; background: #fff; color: #106C54; border-radius: 999px; padding: 4px 8px; font-size: 11px; font-weight: 800; cursor: pointer; font-family: 'Cabin', sans-serif; }
@@ -58,6 +66,9 @@ const styles = `
   .it-add-panel { margin-bottom: 16px; background: #F3EFE8; border: 1px solid #B9B9B9; border-radius: 16px; padding: 14px; display: grid; grid-template-columns: minmax(160px, 1fr) minmax(240px, 2fr) 120px 110px auto; gap: 10px; align-items: center; min-width: 980px; }
   .it-add-input { border: 1px solid #B9B9B9; background: #FFFCF6; color: #106C54; border-radius: 10px; padding: 9px 10px; font-size: 13px; font-family: 'Cabin', sans-serif; outline: none; }
   .it-add-input:focus { border-color: #106C54; }
+  .it-trip-length { display: flex; align-items: center; gap: 7px; color: #659B90; font-size: 12px; font-weight: 800; }
+  .it-trip-length-input { width: 58px; border: 1px solid #B9B9B9; background: #FFFCF6; color: #106C54; border-radius: 10px; padding: 7px 8px; font-size: 13px; font-family: 'Cabin', sans-serif; outline: none; }
+  .it-trip-length-input:focus { border-color: #106C54; }
 `
 
 function parseEvent(content, prefix) {
@@ -80,13 +91,23 @@ function parseDelete(content) {
   return parseEvent(content, '__ITINERARY_DELETE__')
 }
 
+function parseSettings(content) {
+  return parseEvent(content, '__ITINERARY_SETTINGS__')
+}
+
+function normalizedDayCount(value) {
+  const number = Number(value)
+  if (!Number.isFinite(number)) return DEFAULT_DAY_COUNT
+  return Math.min(MAX_DAY_COUNT, Math.max(1, Math.round(number)))
+}
+
 function withDefaults(item, index) {
   return {
     ...item,
     day: item.day || ((index % DAY_COUNT) + 1),
     title: item.title || 'Untitled stop',
     description: item.short_description || item.description || '',
-    price: item.price || null,
+    price: item.price || extractPriceTier(`${item.description || ''} ${item.original_description || ''}`),
   }
 }
 
@@ -98,17 +119,23 @@ function conciseDescription(description) {
   return `${cleaned.slice(0, 112).trim()}...`
 }
 
+function extractPriceTier(text) {
+  const cleaned = text || ''
+  return cleaned.match(/\bPrice:\s*(\${1,4})\b/i)?.[1]
+    || cleaned.match(/(?:^|[\s(:—-])(\${1,4})(?=\s|[).,—-]|$)/)?.[1]
+    || null
+}
+
 function suggestedIcon(item) {
   const text = `${item.title || ''} ${item.description || ''}`.toLowerCase()
-  if (/beach|ocean|snorkel|surf|swim|sunset|sand|shore/.test(text)) return '🌊'
-  if (/breakfast|coffee|cafe|brunch|bakery|pastry/.test(text)) return '☕'
-  if (/lunch|dinner|restaurant|tavern|food|eat|meal|fish house|grill|kitchen|bistro|bar|sushi|pizza|tacos|seafood|steak|house/.test(text)) return '🍴'
-  if (/hike|trail|park|nature|waterfall|lookout|summit|garden/.test(text)) return '🌿'
-  if (/hotel|resort|stay|accommodation/.test(text)) return '🏠'
-  if (/museum|gallery|culture|historic/.test(text)) return '🎨'
-  if (/shop|market|mall/.test(text)) return '🛒'
-  if (/flight|airport|drive|car|transport/.test(text)) return '🚗'
-  if (item.source === 'custom') return '⭐'
+  if (/\b(flight|airport|airline|rental car|rideshare|uber|lyft|shuttle|taxi|drive|road trip|transport|ferry|bus|train)\b/.test(text)) return '🚗'
+  if (/\b(hotel|resort|inn|lodge|condo|airbnb|vrbo|stay|staying|lodging|accommodation|check-in|check in)\b/.test(text)) return '🏠'
+  if (/\b(coffee|cafe|café|espresso|latte|bakery|pastry|breakfast|brunch|bagel|donut)\b/.test(text)) return '☕'
+  if (/\b(restaurant|dinner|lunch|food|eat|meal|tavern|grill|kitchen|bistro|bar|sushi|pizza|taco|tacos|seafood|steak|fish house|fish market|noodle|ramen|poke|plate lunch|luau)\b/.test(text)) return '🍴'
+  if (/\b(beach|ocean|snorkel|snorkeling|surf|swim|sunset|sand|shore|bay|cove|reef|harbor|water|boat|sail|kayak|paddleboard)\b/.test(text)) return '🌊'
+  if (/\b(hike|trail|park|nature|waterfall|lookout|summit|garden|botanical|farm|ranch|volcano|valley|forest|scenic)\b/.test(text)) return '🌿'
+  if (/\b(museum|gallery|culture|cultural|historic|history|art|show|performance|theater|theatre|temple)\b/.test(text)) return '🎨'
+  if (/\b(shop|shopping|market|mall|boutique|souvenir|store|swap meet)\b/.test(text)) return '🛒'
   return '📍'
 }
 
@@ -123,6 +150,8 @@ export default function ItineraryPanel({ conversationId }) {
   const [dragOverDay, setDragOverDay] = useState(null)
   const [showAddForm, setShowAddForm] = useState(false)
   const [newCard, setNewCard] = useState({ title: '', description: '', day: 1, icon: 'AUTO' })
+  const [dayCount, setDayCount] = useState(DEFAULT_DAY_COUNT)
+  const [expandedCardIds, setExpandedCardIds] = useState(new Set())
 
   const mergeEvents = (messages) => {
     const itemMap = new Map()
@@ -135,6 +164,7 @@ export default function ItineraryPanel({ conversationId }) {
         itemMap.set(item.item_id, {
           ...withDefaults(item, itemIndex),
           description: conciseDescription(item.short_description || item.description),
+          original_description: item.original_description || item.description || item.short_description || '',
           message_id: message.id,
           created_at: message.created_at,
         })
@@ -154,9 +184,21 @@ export default function ItineraryPanel({ conversationId }) {
     return Array.from(itemMap.values())
   }
 
+  const mergeSettings = (messages) => {
+    let count = DEFAULT_DAY_COUNT
+    for (const message of messages || []) {
+      const content = message?.content || ''
+      if (!content.startsWith('__ITINERARY_SETTINGS__')) continue
+      const settings = parseSettings(content)
+      if (settings?.day_count) count = normalizedDayCount(settings.day_count)
+    }
+    return count
+  }
+
   useEffect(() => {
     if (!conversationId) {
       setItems([])
+      setDayCount(DEFAULT_DAY_COUNT)
       setLoading(false)
       return
     }
@@ -168,9 +210,10 @@ export default function ItineraryPanel({ conversationId }) {
         .from('messages')
         .select('*')
         .eq('conversation_id', conversationId)
-        .or('content.like.__ITINERARY_ITEM__%,content.like.__ITINERARY_UPDATE__%,content.like.__ITINERARY_DELETE__%')
+        .or('content.like.__ITINERARY_ITEM__%,content.like.__ITINERARY_UPDATE__%,content.like.__ITINERARY_DELETE__%,content.like.__ITINERARY_SETTINGS__%')
         .order('created_at', { ascending: true })
       setItems(mergeEvents(data || []))
+      setDayCount(mergeSettings(data || []))
       setLoading(false)
     }
 
@@ -185,6 +228,7 @@ export default function ItineraryPanel({ conversationId }) {
           setItems((prev) => [...prev, {
             ...withDefaults(item, prev.length),
             description: conciseDescription(item.short_description || item.description),
+            original_description: item.original_description || item.description || item.short_description || '',
             message_id: payload.new.id,
             created_at: payload.new.created_at,
           }].filter((entry, index, arr) => arr.findIndex((x) => x.item_id === entry.item_id) === index))
@@ -196,6 +240,9 @@ export default function ItineraryPanel({ conversationId }) {
           const deleted = parseDelete(content)
           if (!deleted?.item_id) return
           setItems((prev) => prev.filter((item) => item.item_id !== deleted.item_id))
+        } else if (content.startsWith('__ITINERARY_SETTINGS__')) {
+          const settings = parseSettings(content)
+          if (settings?.day_count) setDayCount(normalizedDayCount(settings.day_count))
         }
       })
       .subscribe()
@@ -205,7 +252,26 @@ export default function ItineraryPanel({ conversationId }) {
     }
   }, [conversationId])
 
-  const days = useMemo(() => Array.from({ length: DAY_COUNT }, (_, i) => i + 1), [])
+  const days = useMemo(() => Array.from({ length: dayCount }, (_, i) => i + 1), [dayCount])
+
+  const updateTripLength = async (value) => {
+    const nextDayCount = normalizedDayCount(value)
+    const itemsToMove = items.filter((item) => item.day > nextDayCount)
+    setDayCount(nextDayCount)
+    setNewCard((prev) => ({ ...prev, day: Math.min(Number(prev.day) || 1, nextDayCount) }))
+    setItems((prev) => prev.map((item) => (item.day > nextDayCount ? { ...item, day: nextDayCount } : item)))
+    if (!conversationId) return
+    await supabase.from('messages').insert({
+      conversation_id: conversationId,
+      role: 'user',
+      content: `__ITINERARY_SETTINGS__${JSON.stringify({
+        day_count: nextDayCount,
+        updated_at: new Date().toISOString(),
+      })}`,
+      is_agent: false,
+    })
+    await Promise.all(itemsToMove.map((item) => saveUpdate(item.item_id, { day: nextDayCount })))
+  }
 
   const saveUpdate = async (itemId, updates) => {
     if (!conversationId || !itemId) return
@@ -279,6 +345,15 @@ export default function ItineraryPanel({ conversationId }) {
     setDragOverDay(null)
   }
 
+  const toggleCardDetails = (itemId) => {
+    setExpandedCardIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(itemId)) next.delete(itemId)
+      else next.add(itemId)
+      return next
+    })
+  }
+
   return (
     <>
       <style>{styles}</style>
@@ -289,6 +364,18 @@ export default function ItineraryPanel({ conversationId }) {
             <div className="it-sub">Drag saved ideas between days, then edit the details</div>
           </div>
           <div className="it-header-actions">
+            <label className="it-trip-length">
+              Trip days
+              <input
+                className="it-trip-length-input"
+                type="number"
+                min="1"
+                max={MAX_DAY_COUNT}
+                value={dayCount}
+                disabled={!conversationId}
+                onChange={(e) => updateTripLength(e.target.value)}
+              />
+            </label>
             <div className="it-sub">{items.length} item{items.length === 1 ? '' : 's'}</div>
             <button className="it-add-btn" onClick={() => setShowAddForm((v) => !v)} disabled={!conversationId}>
               {showAddForm ? 'Cancel' : '+ Add card'}
@@ -348,7 +435,7 @@ export default function ItineraryPanel({ conversationId }) {
                   <div className="it-empty-sub">Ask the AI agent for recommendations, click “Add to itinerary,” or create your own card.</div>
                 </div>
               ) : (
-                <div className="it-board">
+                <div className="it-board" style={{ '--day-count': dayCount }}>
                   {days.map((day) => {
                     const dayItems = items.filter((item) => item.day === day)
                     return (
@@ -369,50 +456,66 @@ export default function ItineraryPanel({ conversationId }) {
                         <div className="it-day-items">
                           {dayItems.length === 0 ? (
                             <div className="it-day-empty">Drop saved ideas here.</div>
-                          ) : dayItems.map((item) => (
-                            <div
-                              key={item.item_id || item.message_id}
-                              className="it-card"
-                              draggable
-                              onDragStart={() => setDraggingItemId(item.item_id)}
-                              onDragEnd={() => {
-                                setDraggingItemId(null)
-                                setDragOverDay(null)
-                              }}
-                            >
-                              <div className="it-card-title-row">
-                                <select
-                                  className="it-card-emoji"
-                                  value={item.icon || 'AUTO'}
-                                  onChange={(e) => updateItem(item.item_id, { icon: e.target.value }, true)}
-                                >
-                                  {ICON_OPTIONS.map((icon) => (
-                                    <option key={icon.value} value={icon.value}>{icon.value === 'AUTO' ? cardIcon(item) : icon.value}</option>
-                                  ))}
-                                </select>
-                                <input
-                                  className="it-card-title-input"
-                                  value={item.title}
-                                  onChange={(e) => updateItem(item.item_id, { title: e.target.value })}
-                                  onBlur={(e) => saveUpdate(item.item_id, { title: e.target.value })}
-                                />
+                          ) : dayItems.map((item) => {
+                            const isExpanded = expandedCardIds.has(item.item_id)
+                            const fullDescription = item.original_description || item.description
+                            const hasFullDescription = Boolean(fullDescription)
+                            return (
+                              <div
+                                key={item.item_id || item.message_id}
+                                className="it-card"
+                                draggable={!isExpanded}
+                                onDragStart={() => setDraggingItemId(item.item_id)}
+                                onDragEnd={() => {
+                                  setDraggingItemId(null)
+                                  setDragOverDay(null)
+                                }}
+                              >
+                                {isExpanded ? (
+                                  <div className="it-card-back">
+                                    <div className="it-card-back-head">
+                                      <span>{cardIcon(item)} {item.title}</span>
+                                      <button className="it-btn" onClick={() => toggleCardDetails(item.item_id)}>Back</button>
+                                    </div>
+                                    <div className="it-card-full-desc">{fullDescription}</div>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <div className="it-card-title-row">
+                                      <select
+                                        className="it-card-emoji"
+                                        value={item.icon || 'AUTO'}
+                                        onChange={(e) => updateItem(item.item_id, { icon: e.target.value }, true)}
+                                      >
+                                        {ICON_OPTIONS.map((icon) => (
+                                          <option key={icon.value} value={icon.value}>{icon.value === 'AUTO' ? cardIcon(item) : icon.value}</option>
+                                        ))}
+                                      </select>
+                                      <textarea
+                                        className="it-card-title-input"
+                                        value={item.title}
+                                        rows={Math.max(2, Math.ceil((item.title || '').length / 24))}
+                                        draggable={false}
+                                        onChange={(e) => updateItem(item.item_id, { title: e.target.value })}
+                                        onBlur={(e) => saveUpdate(item.item_id, { title: e.target.value })}
+                                      />
+                                    </div>
+                                    <div className="it-card-meta">
+                                      <span className="it-price">{item.price ? `Price: ${item.price}` : item.source === 'custom' ? 'Custom card' : 'No price'}</span>
+                                      <div className="it-controls">
+                                        <button className="it-btn" onClick={() => toggleCardDetails(item.item_id)} disabled={!hasFullDescription}>
+                                          View details
+                                        </button>
+                                        <button className="it-delete-btn" onClick={() => deleteItem(item.item_id)}>
+                                          Delete
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </>
+                                )}
                               </div>
-                              <textarea
-                                className="it-card-desc-input"
-                                value={item.description}
-                                onChange={(e) => updateItem(item.item_id, { description: e.target.value })}
-                                onBlur={(e) => saveUpdate(item.item_id, { description: e.target.value })}
-                              />
-                              <div className="it-card-meta">
-                                <span className="it-price">{item.price ? `Price: ${item.price}` : item.source === 'custom' ? 'Custom card' : 'No price'}</span>
-                                <div className="it-controls">
-                                  <button className="it-delete-btn" onClick={() => deleteItem(item.item_id)}>
-                                    Delete
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       </div>
                     )

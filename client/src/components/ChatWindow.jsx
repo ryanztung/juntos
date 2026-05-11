@@ -1596,6 +1596,7 @@ export default function ChatWindow({ user, conversationId, isGroup }) {
     .filter((m) => !(m?.content || '').startsWith('__ITINERARY_ITEM__'))
     .filter((m) => !(m?.content || '').startsWith('__ITINERARY_UPDATE__'))
     .filter((m) => !(m?.content || '').startsWith('__ITINERARY_DELETE__'))
+    .filter((m) => !(m?.content || '').startsWith('__ITINERARY_SETTINGS__'))
     .filter((m) => !(m?.content || '').startsWith('__REACTION__'))
 
   const reactionsByMessage = (() => {

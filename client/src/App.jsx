@@ -129,6 +129,11 @@ export default function App() {
     setActiveView('chat')
   }
 
+  const handleOpenItinerary = (id, isGroup = false) => {
+    setActiveConversation({ id, isGroup })
+    setActiveView('itinerary')
+  }
+
   if (appState === 'loading') {
     return (
       <>
@@ -180,7 +185,7 @@ export default function App() {
           activeView={activeView}
           onSelect={handleSelectConversation}
           onNew={handleNewConversation}
-          onOpenItinerary={() => setActiveView('itinerary')}
+          onOpenItinerary={handleOpenItinerary}
         />
         <div style={{ flex: 1, overflow: 'hidden' }}>
           {activeView === 'itinerary' ? (

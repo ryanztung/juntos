@@ -206,6 +206,13 @@ function stripMarkdown(text) {
     .trim()
 }
 
+function extractPriceTier(text) {
+  const cleaned = text || ''
+  return cleaned.match(/\bPrice:\s*(\${1,4})\b/i)?.[1]
+    || cleaned.match(/(?:^|[\s(:—-])(\${1,4})(?=\s|[).,—-]|$)/)?.[1]
+    || null
+}
+
 function extractItinerarySuggestions(content) {
   const raw = (content || '').split(/\n\s*(?:#{1,6}\s*)?(?:sources|citations|references)\s*:?\s*\n/i)[0] || ''
   const casualMatches = Array.from(raw.matchAll(/\b(?:should we|we should|let'?s|lets|want to|could we)\s+(?:do|visit|try|check out|go to|add|plan)\s+([^?.!\n]{3,80})/gi))
@@ -231,7 +238,7 @@ function extractItinerarySuggestions(content) {
     .filter((line) => {
       const plain = stripMarkdown(line)
       const title = plain.split(':')[0]?.trim() || ''
-      const hasPrice = /\bPrice:\s*\${1,4}\b/i.test(line)
+      const hasPrice = Boolean(extractPriceTier(line))
       const placeSignal = /\b(restaurant|cafe|coffee|tavern|bar|grill|kitchen|bistro|house|beach|park|trail|museum|hotel|resort|market|tour|snorkel|surf|hike|lookout|waterfall|harbor|pier|garden|luau|spa|farm|ranch|bay|cove|point|road|center|village|mall|shop|winery|brewery|boat|cruise|walk|drive|excursion|activity|experience)\b/i.test(plain)
       const titleLooksSpecific = /^[A-Z0-9][A-Za-z0-9&'.’\- ]{2,80}$/.test(title) && !/\b(the|this|these|for|why|because|overall|option|idea)\b/i.test(title)
       const summaryTitle = /\b(pacing|needs?|preference|preferences|tradeoffs?|constraints?|budget|downtime|group fit|summary|vibe|style|dietary|accessibility|plan|approach|recommendation strategy)\b/i.test(title)
@@ -247,8 +254,12 @@ function extractItinerarySuggestions(content) {
     .map((line) => {
       const cleaned = stripMarkdown(line)
       const [titlePart, ...rest] = cleaned.split(':')
-      const price = cleaned.match(/\bPrice:\s*(\${1,4})\b/i)?.[1] || null
-      const description = rest.join(':').replace(/\bPrice:\s*\${1,4}\b/i, '').trim()
+      const price = extractPriceTier(cleaned)
+      const description = rest.join(':')
+        .replace(/\bPrice:\s*\${1,4}\b/gi, '')
+        .replace(/(?:^|[\s(:—-])\${1,4}(?=\s|[).,—-]|$)/, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
       return {
         title: titlePart.trim(),
         description,

@@ -76,6 +76,65 @@ function _bulletizeVenueParagraphs(text: string): string {
   return parts.map((p) => venueLike.includes(p) ? `- ${p}` : p).join("\n");
 }
 
+function _shortFeedbackText(text: string): string {
+  return _stripTrailingSourcesBlock(text || "")
+    .replace(/\s+/g, " ")
+    .slice(0, 240)
+    .trim();
+}
+
+function _buildReactionFeedback(messageHistory: Array<Record<string, unknown>>): string | null {
+  const messagesById = new Map<string, Record<string, unknown>>();
+  for (const message of messageHistory) {
+    if (message.id) messagesById.set(String(message.id), message);
+  }
+
+  const latestByUserReaction = new Map<string, boolean>();
+  for (const message of messageHistory) {
+    const content = String(message.content ?? "");
+    if (!content.startsWith("__REACTION__")) continue;
+    try {
+      const ev = JSON.parse(content.replace(/^__REACTION__/, ""));
+      if (!ev?.message_id || !ev?.emoji || !ev?.user_id) continue;
+      latestByUserReaction.set(`${ev.message_id}:${ev.emoji}:${ev.user_id}`, Boolean(ev.active));
+    } catch {
+      // ignore malformed reaction events
+    }
+  }
+
+  const scored = new Map<string, { positive: number; negative: number; emphasis: number }>();
+  for (const [key, active] of latestByUserReaction.entries()) {
+    if (!active) continue;
+    const [messageId, emoji] = key.split(":");
+    const entry = scored.get(messageId) ?? { positive: 0, negative: 0, emphasis: 0 };
+    if (emoji === "👎") entry.negative += 1;
+    else if (emoji === "‼️") entry.emphasis += 1;
+    else if (["👍", "❤️"].includes(emoji)) entry.positive += 1;
+    scored.set(messageId, entry);
+  }
+
+  const liked: string[] = [];
+  const disliked: string[] = [];
+  for (const [messageId, score] of scored.entries()) {
+    const source = messagesById.get(messageId);
+    if (!source?.is_agent) continue;
+    const text = _shortFeedbackText(String(source.content ?? ""));
+    if (!text) continue;
+    if (score.positive + score.emphasis > score.negative) liked.push(text);
+    if (score.negative > score.positive + score.emphasis) disliked.push(text);
+  }
+
+  const parts: string[] = [];
+  if (liked.length > 0) {
+    parts.push(`Users positively reacted to these prior AI responses. Prefer similar recommendation style, level of detail, tradeoffs, and types of options when relevant:\n${liked.slice(-3).map((text) => `- ${text}`).join("\n")}`);
+  }
+  if (disliked.length > 0) {
+    parts.push(`Users negatively reacted to these prior AI responses. Avoid repeating similar assumptions, tone, formats, or recommendation patterns when relevant:\n${disliked.slice(-3).map((text) => `- ${text}`).join("\n")}`);
+  }
+
+  return parts.length > 0 ? `Conversation reaction feedback:\n${parts.join("\n\n")}` : null;
+}
+
 function _inlineSourceTags(text: string, citations: string | null): string {
   if (!text || !citations) return text;
 
@@ -686,6 +745,8 @@ Deno.serve(async (req: Request) => {
       profileBlock = `User Profile (from onboarding):\n${formatProfile(userProfile)}`;
     }
 
+    const reactionFeedback = _buildReactionFeedback((messageHistory ?? []) as Array<Record<string, unknown>>);
+
     // --- Build system instruction ---
     const ragInstruction = `\nYou have access to a real traveler reviews database currently loaded with reviews for Maui. Whenever a user asks about places, restaurants, hotels, beaches, or activities — especially in Maui — always call search_reviews to ground your recommendations in real traveler experiences. Use create_itinerary to build a structured day-by-day plan when the user is ready to finalize their trip.
 
@@ -714,10 +775,12 @@ When recommending places or plans, prefer options that match this group fit summ
 For group chat answers, when the request involves planning, recommendations, itinerary decisions, places to stay, places to eat, activities, budget, pacing, or destination fit, begin with a short section titled "Group fit summary". Start that section with wording like "Based on everyone's preferences, here's what I recommend optimizing for..." Keep it to 2-4 bullets. Synthesize the onboarding preferences across all members, focusing on what seems to work for everyone, likely tradeoffs, and any constraints to respect. Do not list every person's full profile unless asked; summarize the shared pattern in plain language.
 
 ${profileBlock}
+${reactionFeedback ? `\n${reactionFeedback}\n` : ""}
 ${ragInstruction}`
       : `You are a knowledgeable and friendly AI travel agent. Help users plan their trips by searching for flights, hotels, activities, and providing personalized recommendations. Always use consistent markdown formatting
 
 ${profileBlock}
+${reactionFeedback ? `\n${reactionFeedback}\n` : ""}
 ${ragInstruction}`;
 
     // --- Eager RAG retrieval (so answers are grounded even if the model doesn't call tools) ---

@@ -117,6 +117,27 @@ const styles = `
   }
   .cl-item.active .cl-item-title { color: #106C54; }
   .cl-item-date { font-size: 11px; color: #B9B9B9; }
+  .cl-trip-group { margin-bottom: 6px; }
+  .cl-trip-group .cl-item { margin-bottom: 0; }
+  .cl-subitem {
+    margin: 2px 0 0 30px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: #659B90;
+    font-size: 12px;
+    font-weight: 700;
+    border: 1px solid transparent;
+  }
+  .cl-subitem:hover { background: rgba(16,108,84,0.06); }
+  .cl-subitem.active {
+    background: rgba(16,108,84,0.1);
+    border-color: rgba(16,108,84,0.22);
+    color: #106C54;
+  }
   .cl-empty { padding: 12px; text-align: center; color: #B9B9B9; font-size: 12px; }
   .cl-footer {
     padding: 12px 16px;
@@ -496,32 +517,28 @@ export default function ConversationList({ user, activeConversationId, activeVie
             <div className="cl-empty">Loading...</div>
           ) : (
             <>
-              <div className="cl-section-label">Planner</div>
-              <div
-                className={`cl-item${activeView === 'itinerary' ? ' active' : ''}`}
-                onClick={onOpenItinerary}
-              >
-                <span className="cl-item-icon">🗓️</span>
-                <div className="cl-item-body">
-                  <div className="cl-item-title">Itinerary</div>
-                  <div className="cl-item-date">Saved AI suggestions</div>
-                </div>
-              </div>
-
               <div className="cl-section-label">Agent Chats</div>
               {soloConversations.length === 0 ? (
                 <div className="cl-empty">No chats yet.</div>
               ) : (
                 soloConversations.map((conv) => (
-                  <div
-                    key={conv.id}
-                    className={`cl-item${activeConversationId === conv.id ? ' active' : ''}`}
-                    onClick={() => onSelect(conv.id, false)}
-                  >
-                    <span className="cl-item-icon">🤖</span>
-                    <div className="cl-item-body">
-                      <div className="cl-item-title">{conv.title || 'Untitled Conversation'}</div>
-                      <div className="cl-item-date">{formatDate(conv.created_at)}</div>
+                  <div key={conv.id} className="cl-trip-group">
+                    <div
+                      className={`cl-item${activeConversationId === conv.id && activeView === 'chat' ? ' active' : ''}`}
+                      onClick={() => onSelect(conv.id, false)}
+                    >
+                      <span className="cl-item-icon">🤖</span>
+                      <div className="cl-item-body">
+                        <div className="cl-item-title">{conv.title || 'Untitled Conversation'}</div>
+                        <div className="cl-item-date">{formatDate(conv.created_at)}</div>
+                      </div>
+                    </div>
+                    <div
+                      className={`cl-subitem${activeConversationId === conv.id && activeView === 'itinerary' ? ' active' : ''}`}
+                      onClick={() => onOpenItinerary(conv.id, false)}
+                    >
+                      <span>🗓️</span>
+                      <span>Itinerary</span>
                     </div>
                   </div>
                 ))
@@ -532,15 +549,23 @@ export default function ConversationList({ user, activeConversationId, activeVie
                 <div className="cl-empty">No groups yet. Create one!</div>
               ) : (
                 groupConversations.map((conv) => (
-                  <div
-                    key={conv.id}
-                    className={`cl-item${activeConversationId === conv.id ? ' active' : ''}`}
-                    onClick={() => onSelect(conv.id, true)}
-                  >
-                    <span className="cl-item-icon">👥</span>
-                    <div className="cl-item-body">
-                      <div className="cl-item-title">{conv.group_name || 'Unnamed Group'}</div>
-                      <div className="cl-item-date">{formatDate(conv.created_at)}</div>
+                  <div key={conv.id} className="cl-trip-group">
+                    <div
+                      className={`cl-item${activeConversationId === conv.id && activeView === 'chat' ? ' active' : ''}`}
+                      onClick={() => onSelect(conv.id, true)}
+                    >
+                      <span className="cl-item-icon">👥</span>
+                      <div className="cl-item-body">
+                        <div className="cl-item-title">{conv.group_name || 'Unnamed Group'}</div>
+                        <div className="cl-item-date">{formatDate(conv.created_at)}</div>
+                      </div>
+                    </div>
+                    <div
+                      className={`cl-subitem${activeConversationId === conv.id && activeView === 'itinerary' ? ' active' : ''}`}
+                      onClick={() => onOpenItinerary(conv.id, true)}
+                    >
+                      <span>🗓️</span>
+                      <span>Itinerary</span>
                     </div>
                   </div>
                 ))
