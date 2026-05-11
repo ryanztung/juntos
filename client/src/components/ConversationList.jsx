@@ -337,7 +337,7 @@ function CreateGroupModal({ user, onCreated, onClose }) {
   )
 }
 
-export default function ConversationList({ user, activeConversationId, onSelect, onNew }) {
+export default function ConversationList({ user, activeConversationId, activeView, onSelect, onNew, onOpenItinerary }) {
   const [soloConversations, setSoloConversations] = useState([])
   const [groupConversations, setGroupConversations] = useState([])
   const [pendingInvites, setPendingInvites] = useState([])
@@ -496,6 +496,18 @@ export default function ConversationList({ user, activeConversationId, onSelect,
             <div className="cl-empty">Loading...</div>
           ) : (
             <>
+              <div className="cl-section-label">Planner</div>
+              <div
+                className={`cl-item${activeView === 'itinerary' ? ' active' : ''}`}
+                onClick={onOpenItinerary}
+              >
+                <span className="cl-item-icon">🗓️</span>
+                <div className="cl-item-body">
+                  <div className="cl-item-title">Itinerary</div>
+                  <div className="cl-item-date">Saved AI suggestions</div>
+                </div>
+              </div>
+
               <div className="cl-section-label">Agent Chats</div>
               {soloConversations.length === 0 ? (
                 <div className="cl-empty">No chats yet.</div>

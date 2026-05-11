@@ -64,6 +64,18 @@ function _looksLikeBarePriceList(text: string): boolean {
   return !hasSummaries && !hasPriceWord;
 }
 
+function _bulletizeVenueParagraphs(text: string): string {
+  if (!text || text.includes("\n- ")) return text;
+  const venueStart = /(?<!^)(?=\s+(?:\[[^\]]+\]\([^)]+\)|[A-Z][A-Za-z0-9&'.’\- ]{1,80})(?:\s*\([^)]*\))?:\s+)/g;
+  const parts = text.split(venueStart).map((p) => p.trim()).filter(Boolean);
+  const venueLike = parts.filter((p) =>
+    /^(?:\[[^\]]+\]\([^)]+\)|[A-Z][A-Za-z0-9&'.’\- ]{1,80})(?:\s*\([^)]*\))?:\s+/.test(p)
+    && /\bPrice:\s*\${1,4}\b/.test(p)
+  );
+  if (venueLike.length < 3) return text;
+  return parts.map((p) => venueLike.includes(p) ? `- ${p}` : p).join("\n");
+}
+
 function _inlineSourceTags(text: string, citations: string | null): string {
   if (!text || !citations) return text;
 
@@ -72,52 +84,45 @@ function _inlineSourceTags(text: string, citations: string | null): string {
     .map((l) => l.trim())
     .filter(Boolean);
 
-  const tags: Array<{ source: string; location: string }> = [];
+  const tags: Array<{ source: string; location: string; url: string | null }> = [];
   for (const line of lines) {
-    // Format: "- REDDIT: MauiVisitors (attraction)" or "- GOOGLE: Mala Ocean Tavern (restaurant) — 5★"
-    const m = line.match(/^[-*]?\s*([A-Z0-9_]+):\s*(.+?)\s*\(/);
+    // Format: "- REDDIT: [MauiVisitors](https://...) (attraction)" or "- GOOGLE: Mala Ocean Tavern (restaurant) — 5★"
+    const m = line.match(/^[-*]?\s*([A-Z0-9_]+):\s*(?:\[(.+?)\]\([^)]+\)|(.+?))\s*\(/);
     if (!m) continue;
     const source = m[1];
-    const location = m[2];
+    const location = m[2] || m[3];
+    const url = line.match(/\[[^\]]+\]\(([^)]+)\)/)?.[1] ?? null;
     if (!location || location.length < 3) continue;
-    tags.push({ source, location });
+    tags.push({ source, location, url });
   }
 
-  const labelFor = (s: string) => {
-    switch (s) {
-      case "REDDIT":
-        return "reddit";
-      case "GOOGLE":
-        return "google reviews";
-      case "YELP":
-        return "yelp";
-      case "TRIPADVISOR":
-        return "tripadvisor";
-      default:
-        return s.toLowerCase();
-    }
-  };
-
   let out = text;
-  for (const { source, location } of tags) {
-    const label = labelFor(source);
+  for (const { location, url } of tags) {
     // Only tag the first occurrence, and don't double-tag.
     if (!out.includes(location)) continue;
     const escapedLoc = location.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
     const alreadyTagged = new RegExp(`${escapedLoc}\\s*\\((reddit|google reviews|yelp|tripadvisor)\\)`, "i");
-    if (alreadyTagged.test(out)) continue;
+    const alreadyLinked = new RegExp(`\\[${escapedLoc}\\]\\([^)]+\\)`, "i");
+    if (alreadyLinked.test(out)) continue;
+
+    const linkedLocation = url ? `[${location}](${url})` : location;
+    if (alreadyTagged.test(out)) {
+      const re = new RegExp(`${escapedLoc}(\\s*\\((?:reddit|google reviews|yelp|tripadvisor)\\))`, "i");
+      out = out.replace(re, linkedLocation);
+      continue;
+    }
 
     // If the location is immediately followed by an existing parenthetical like
     // "Maui Beach Hotel (Kahului)", insert our tag before that parenthetical.
     const followedByParen = new RegExp(`${escapedLoc}\\s*\\(`);
     if (followedByParen.test(out)) {
       const re = new RegExp(`${escapedLoc}\\s*\\(`);
-      out = out.replace(re, `${location} (${label}) (`);
+      out = out.replace(re, `${linkedLocation} (`);
       continue;
     }
 
     const re = new RegExp(escapedLoc);
-    out = out.replace(re, `${location} (${label})`);
+    out = out.replace(re, linkedLocation);
   }
 
   return out;
@@ -355,9 +360,19 @@ async function searchReviews(
     .join("\n\n");
 
   const sources = Array.from(new Set(relevant.map((r) => r.source.toUpperCase()))).sort();
+  const citationUrl = (r: typeof relevant[number]) => {
+    const source = (r.source ?? "").toLowerCase();
+    const place = r.location_name ?? "";
+    if (source === "reddit") return `https://www.reddit.com/r/${encodeURIComponent(place)}/`;
+    if (source === "google") return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${place} ${city}`)}`;
+    if (source === "yelp") return `https://www.yelp.com/search?find_desc=${encodeURIComponent(place)}&find_loc=${encodeURIComponent(city)}`;
+    if (source === "tripadvisor") return `https://www.tripadvisor.com/Search?q=${encodeURIComponent(`${place} ${city}`)}`;
+    return `https://www.google.com/search?q=${encodeURIComponent(`${place} ${city} ${source}`)}`;
+  };
+
   const citations = relevant
     .slice(0, 5)
-    .map((r) => `- ${r.source.toUpperCase()}: ${r.location_name} (${r.category})${r.rating ? ` — ${r.rating}★` : ""}`)
+    .map((r) => `- ${r.source.toUpperCase()}: [${r.location_name}](${citationUrl(r)}) (${r.category})${r.rating ? ` — ${r.rating}★` : ""}`)
     .join("\n");
 
   return {
@@ -566,7 +581,72 @@ Deno.serve(async (req: Request) => {
       ].join("\n");
     }
 
+    function buildGroupFitSummary(profiles: Record<string, unknown>[]): string | null {
+      const hasValue = (value: unknown) => Array.isArray(value) ? value.length > 0 : Boolean(value);
+      const filled = profiles.filter((p) =>
+        ["budget", "trip_style", "activity_style", "downtime", "accommodation", "dietary"].some((key) => hasValue(p[key]))
+      );
+      if (filled.length === 0) return null;
+
+      const friendlyPreference = (key: string, value: string | null): string | null => {
+        if (!value) return null;
+        if (key === "budget") return `a ${value.replace("/day", " daily")} budget`;
+        if (key === "trip_style") return value.toLowerCase();
+        if (key === "activity_style") {
+          if (value.startsWith("Fully planned")) return "a more structured itinerary";
+          if (value.startsWith("Mostly planned")) return "a few planned anchors with room to wander";
+          if (value.startsWith("Mix of both")) return "structured mornings or afternoons with flexible time";
+          if (value.startsWith("Go with the flow")) return "spontaneous, flexible exploration";
+        }
+        if (key === "downtime") {
+          if (value.startsWith("Lots")) return "plenty of downtime";
+          if (value.startsWith("Some")) return "some built-in chill time";
+          if (value.startsWith("Minimal")) return "a fuller schedule";
+        }
+        if (key === "accommodation") return value === "No preference" ? null : value.toLowerCase();
+        return value;
+      };
+
+      const mostCommon = (key: string): string | null => {
+        const counts = new Map<string, number>();
+        for (const p of profiles) {
+          const value = p[key];
+          if (!value || Array.isArray(value)) continue;
+          counts.set(String(value), (counts.get(String(value)) ?? 0) + 1);
+        }
+        return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+      };
+
+      const dietary = [...new Set(
+        profiles.flatMap((p) => Array.isArray(p.dietary) ? p.dietary : p.dietary ? [p.dietary] : [])
+          .map((v) => String(v))
+          .filter((v) => v && v !== "None")
+      )];
+      const budget = mostCommon("budget");
+      const trip = mostCommon("trip_style");
+      const activity = mostCommon("activity_style");
+      const downtime = mostCommon("downtime");
+      const accommodation = mostCommon("accommodation");
+
+      const budgetText = friendlyPreference("budget", budget);
+      const tripText = friendlyPreference("trip_style", trip);
+      const activityText = friendlyPreference("activity_style", activity);
+      const downtimeText = friendlyPreference("downtime", downtime);
+      const stayText = friendlyPreference("accommodation", accommodation);
+      const first = [budgetText, tripText].filter(Boolean).join(" and ");
+      const second = [activityText, downtimeText].filter(Boolean).join(" plus ");
+      const staySentence = stayText
+        ? ` ${stayText[0].toUpperCase()}${stayText.slice(1)} looks like the clearest stay preference.`
+        : "";
+      const foodText = dietary.length > 0
+        ? ` Food plans should account for ${dietary.slice(0, 3).join(", ")}${dietary.length > 3 ? ", and more" : ""}.`
+        : "";
+
+      return `${first ? `This group seems best suited for ${first}.` : "This group has a mix of travel preferences."} ${second ? `A good itinerary should include ${second}.` : "Keep the itinerary flexible enough for different planning styles."}${staySentence}${foodText}`.trim();
+    }
+
     let profileBlock: string;
+    let groupFitSummary: string | null = null;
 
     if (is_group) {
       // Fetch all group members then batch-load their profiles
@@ -586,8 +666,10 @@ Deno.serve(async (req: Request) => {
         (allProfiles ?? []).map((p: Record<string, unknown>) => [p.id as string, p])
       );
 
+      groupFitSummary = buildGroupFitSummary((allProfiles ?? []) as Record<string, unknown>[]);
+
       const memberBlocks = memberIds.map((uid) => {
-        const profile = profileMap.get(uid) ?? null;
+        const profile = (profileMap.get(uid) as Record<string, unknown> | undefined) ?? null;
         const name = (profile?.display_name as string | null)
           ?? (uid === userId ? (sender_display_name ?? "Unknown") : "Unknown");
         const isInvoker = uid === userId;
@@ -609,10 +691,10 @@ Deno.serve(async (req: Request) => {
 
 When you recommend specific venues (restaurants, hotels, activities, etc.), write the same kind of review-rich recommendations you normally do (mention specific highlights from the provided snippets like dishes/drinks, vibe, service, views, reservations, etc.), and append a simple price tier tag in dollar signs.
 
-Use this exact format per venue entry:
-<Venue Name> (<optional area or source label>): <1-2 sentences grounded in the provided review snippets/citations> Price: $/$$/$$$/$$$$
+Use this exact markdown bullet format per venue entry:
+- <Venue Name> (<optional area>): <1-2 sentences grounded in the provided review snippets/citations> Price: $/$$/$$$/$$$$
 
-Do NOT output bare lists of venue names with only price tiers — every venue must include 1-2 concrete review details.
+Do NOT output venue recommendations as one long paragraph. Each venue must be a separate bullet. Do NOT output bare lists of venue names with only price tiers — every venue must include 1-2 concrete review details.
 
 Rules for price tiers:
 - Prefer to base $-$$$$ on the provided review snippets/citations when they include evidence (explicit $ signs, numeric prices, or clear language like "cheap", "budget", "affordable", "pricey", "upscale", "splurge", "luxury").
@@ -623,6 +705,13 @@ Rules for price tiers:
 
     const systemInstruction = is_group
       ? `You are a knowledgeable and friendly AI travel agent participating in a group travel planning chat. You were invoked by ${sender_display_name ?? "a group member"} using @travel-agent. Your goal is to plan a trip that works for everyone in the group — look for destinations, budgets, and activities that satisfy the whole group, and flag any conflicts (e.g. dietary restrictions, budget gaps) proactively.
+
+Use this synthesized group fit summary as the primary planning lens when choosing recommendations, pacing, budget level, food options, and lodging/activity tradeoffs:
+${groupFitSummary ?? "No reliable group fit summary is available yet; infer carefully from the individual profiles below."}
+
+When recommending places or plans, prefer options that match this group fit summary. If a recommendation is a compromise, briefly say why it still works for the group. Avoid suggestions that clearly conflict with the group's budget, activity style, downtime needs, accommodation preference, or dietary restrictions unless you explicitly flag the tradeoff.
+
+For group chat answers, when the request involves planning, recommendations, itinerary decisions, places to stay, places to eat, activities, budget, pacing, or destination fit, begin with a short section titled "Group fit summary". Start that section with wording like "Based on everyone's preferences, here's what I recommend optimizing for..." Keep it to 2-4 bullets. Synthesize the onboarding preferences across all members, focusing on what seems to work for everyone, likely tradeoffs, and any constraints to respect. Do not list every person's full profile unless asked; summarize the shared pattern in plain language.
 
 ${profileBlock}
 ${ragInstruction}`
@@ -841,6 +930,11 @@ ${ragInstruction}`;
 
       finalAssistantText = _stripTrailingSourcesBlock(finalAssistantText);
       finalAssistantText = _stripUnknownPriceTags(finalAssistantText);
+      finalAssistantText = _bulletizeVenueParagraphs(finalAssistantText);
+
+      if (is_group && groupFitSummary && !/group fit summary/i.test(finalAssistantText)) {
+        finalAssistantText = `## Group fit summary\nBased on everyone's preferences, here's the trip style I'm optimizing for: ${groupFitSummary}\n\n${finalAssistantText}`;
+      }
 
       // Only inline source tags when RAG is used
       const ragCitedLocations = ragCitationsList

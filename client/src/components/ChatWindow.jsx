@@ -519,6 +519,21 @@ const styles = `
     font-family: 'Cabin', sans-serif;
   }
   .cw-invite-btn:hover { background: #659B90; }
+  .cw-pref-btn {
+    background: #FFFCF6;
+    border: 1px solid #B9B9B9;
+    border-radius: 8px;
+    padding: 7px 13px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #106C54;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    flex-shrink: 0;
+    white-space: nowrap;
+    font-family: 'Cabin', sans-serif;
+  }
+  .cw-pref-btn:hover { border-color: #106C54; background: rgba(16,108,84,0.06); }
   .cw-messages {
     flex: 1;
     overflow-y: auto;
@@ -746,6 +761,165 @@ const styles = `
     font-size: 10px; font-weight: 600; color: #B9B9B9;
     background: #F3EFE8; border-radius: 4px; padding: 1px 5px;
     flex-shrink: 0; white-space: nowrap;
+  }
+  .cw-pref-card {
+    border: 1px solid #B9B9B9;
+    background: #F3EFE8;
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+  .cw-pref-card-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .cw-pref-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: #106C54;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cw-pref-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .cw-pref-item {
+    background: #FFFCF6;
+    border: 1px solid rgba(185,185,185,0.65);
+    border-radius: 14px;
+    padding: 11px;
+  }
+  .cw-pref-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #659B90;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 5px;
+  }
+  .cw-pref-emoji { font-size: 16px; line-height: 1; }
+  .cw-pref-value {
+    font-size: 13px;
+    line-height: 1.35;
+    color: #106C54;
+    font-weight: 600;
+  }
+  .cw-pref-value.muted {
+    color: #9CA3AF;
+    font-weight: 500;
+  }
+  .cw-pref-empty {
+    font-size: 13px;
+    color: #7A7A7A;
+    line-height: 1.45;
+    background: #F3EFE8;
+    border: 1px dashed #B9B9B9;
+    border-radius: 10px;
+    padding: 12px;
+  }
+  .cw-pref-modal { max-width: 680px; max-height: 82vh; overflow-y: auto; }
+  .cw-pref-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .cw-pref-member-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 12px;
+  }
+  .cw-pref-member-card {
+    border: 1px solid #B9B9B9;
+    background: #F3EFE8;
+    border-radius: 14px;
+    padding: 16px 10px;
+    cursor: pointer;
+    font-family: 'Cabin', sans-serif;
+    transition: border-color 0.15s, background 0.15s, transform 0.15s;
+  }
+  .cw-pref-member-card:hover {
+    border-color: #106C54;
+    background: rgba(16,108,84,0.07);
+    transform: translateY(-1px);
+  }
+  .cw-pref-member-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 10px;
+    font-size: 24px;
+    font-weight: 700;
+    color: #fff;
+    overflow: hidden;
+  }
+  .cw-pref-member-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .cw-pref-member-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: #106C54;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cw-pref-member-hint {
+    margin-top: 4px;
+    font-size: 11px;
+    color: #7A7A7A;
+    text-align: center;
+  }
+  .cw-pref-detail-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+  .cw-pref-back-btn {
+    border: 1px solid #B9B9B9;
+    background: #fff;
+    border-radius: 10px;
+    padding: 8px 10px;
+    color: #106C54;
+    cursor: pointer;
+    font-family: 'Cabin', sans-serif;
+    font-weight: 700;
+  }
+  .cw-pref-back-btn:hover { border-color: #106C54; background: rgba(16,108,84,0.06); }
+  .cw-pref-dietary {
+    grid-column: 1 / -1;
+  }
+  .cw-pref-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .cw-pref-chip {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    background: rgba(16,108,84,0.08);
+    color: #106C54;
+    border: 1px solid rgba(16,108,84,0.18);
+    padding: 5px 8px;
+    font-size: 12px;
+    font-weight: 700;
   }
   .cw-drawer-divider { border: none; border-top: 1px solid #B9B9B9; margin: 16px 0; }
   .cw-inv-input {
@@ -1007,6 +1181,182 @@ function MembersDrawer({ open, onClose, conversationId, user, members, onMembers
   )
 }
 
+function PreferencesModal({ open, onClose, user, members }) {
+  const [selectedMemberId, setSelectedMemberId] = useState(null)
+  const preferenceRows = [
+    { label: 'Budget', emoji: '💰', key: 'budget' },
+    { label: 'Vibe', emoji: '🌍', key: 'destination' },
+    { label: 'Trip', emoji: '✈️', key: 'trip_style' },
+    { label: 'AM', emoji: '🌅', key: 'pace_morning' },
+    { label: 'PM', emoji: '🌙', key: 'pace_evening' },
+    { label: 'Plans', emoji: '🗺️', key: 'activity_style' },
+    { label: 'Chill', emoji: '🛋️', key: 'downtime' },
+    { label: 'Stay', emoji: '🏨', key: 'accommodation' },
+    { label: 'Food', emoji: '🍽️', key: 'dietary' },
+  ]
+
+  const formatPreferenceValue = (value) => {
+    if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : 'Not specified'
+    return value || 'Not specified'
+  }
+  const hasPreferenceValue = (value) => Array.isArray(value) ? value.length > 0 : Boolean(value)
+  const dietaryValues = (value) => Array.isArray(value) ? value : value ? [value] : []
+  const friendlyPreference = (key, value) => {
+    if (!value) return null
+    const text = String(value)
+    if (key === 'budget') return `a ${text.replace('/day', ' daily')} budget`
+    if (key === 'trip_style') return text.toLowerCase()
+    if (key === 'activity_style') {
+      if (text.startsWith('Fully planned')) return 'a more structured itinerary'
+      if (text.startsWith('Mostly planned')) return 'a few planned anchors with room to wander'
+      if (text.startsWith('Mix of both')) return 'structured mornings or afternoons with flexible time'
+      if (text.startsWith('Go with the flow')) return 'spontaneous, flexible exploration'
+    }
+    if (key === 'downtime') {
+      if (text.startsWith('Lots')) return 'plenty of downtime'
+      if (text.startsWith('Some')) return 'some built-in chill time'
+      if (text.startsWith('Minimal')) return 'a fuller schedule'
+    }
+    if (key === 'accommodation') return text === 'No preference' ? null : text.toLowerCase()
+    return text
+  }
+  const mostCommon = (key) => {
+    const counts = new Map()
+    for (const m of members) {
+      const value = m[key]
+      if (!value || Array.isArray(value)) continue
+      counts.set(value, (counts.get(value) || 0) + 1)
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || null
+  }
+  const groupSummary = (() => {
+    const filled = members.filter((m) => preferenceRows.some((row) => hasPreferenceValue(m[row.key])))
+    if (filled.length === 0) return 'Once your group fills out onboarding, Juntos will summarize what kind of trip works best for everyone.'
+    const budget = mostCommon('budget')
+    const trip = mostCommon('trip_style')
+    const activity = mostCommon('activity_style')
+    const downtime = mostCommon('downtime')
+    const accommodation = mostCommon('accommodation')
+    const food = [...new Set(members.flatMap((m) => dietaryValues(m.dietary)).filter((v) => v && v !== 'None'))]
+    const budgetText = friendlyPreference('budget', budget)
+    const tripText = friendlyPreference('trip_style', trip)
+    const activityText = friendlyPreference('activity_style', activity)
+    const downtimeText = friendlyPreference('downtime', downtime)
+    const stayText = friendlyPreference('accommodation', accommodation)
+    const foodText = food.length > 0 ? ` Food plans should account for ${food.slice(0, 3).join(', ')}${food.length > 3 ? ', and more' : ''}.` : ''
+    const first = [budgetText, tripText].filter(Boolean).join(' and ')
+    const second = [activityText, downtimeText].filter(Boolean).join(' plus ')
+    const staySentence = stayText ? ` ${stayText[0].toUpperCase()}${stayText.slice(1)} looks like the clearest stay preference.` : ''
+    return `${first ? `This group seems best suited for ${first}.` : 'This group has a mix of travel preferences.'} ${second ? `A good plan should include ${second}.` : 'Keep the plan flexible enough for different travel styles.'}${staySentence}${foodText}`.trim()
+  })()
+
+  useEffect(() => {
+    if (!open) setSelectedMemberId(null)
+  }, [open])
+
+  if (!open) return null
+
+  const selectedMember = members.find((m) => m.user_id === selectedMemberId)
+
+  const renderAvatar = (m, sizeClass = 'cw-pref-member-avatar') => {
+    const name = m.display_name ?? 'Unknown'
+    return (
+      <div className={sizeClass} style={{ background: avatarColor(name) }}>
+        {m.avatar_url ? <img src={m.avatar_url} alt="" /> : name[0]?.toUpperCase()}
+      </div>
+    )
+  }
+
+  return (
+    <div className="cw-modal-backdrop" onClick={onClose}>
+      <div className="cw-modal cw-pref-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="cw-pref-modal-head">
+          <div>
+            <div className="cw-modal-title">Group preferences</div>
+            <div className="cw-modal-label">
+              {selectedMember ? 'Onboarding summary' : 'Choose a group member'}
+            </div>
+          </div>
+          <button className="cw-drawer-close" onClick={onClose} aria-label="Close">×</button>
+        </div>
+
+        {!selectedMember && (
+          <div className="cw-pref-empty" style={{ marginBottom: '14px' }}>
+            ✨ {groupSummary}
+          </div>
+        )}
+
+        {!selectedMember && members.length === 0 ? (
+          <div className="cw-pref-empty">No group members found yet.</div>
+        ) : selectedMember ? (
+          <>
+            <div className="cw-pref-detail-head">
+              <button className="cw-pref-back-btn" onClick={() => setSelectedMemberId(null)}>
+                ← Back
+              </button>
+              {renderAvatar(selectedMember)}
+              <div>
+                <div className="cw-pref-name">
+                  {selectedMember.display_name ?? 'Unknown'}
+                  {selectedMember.user_id === user.id ? ' (you)' : ''}
+                </div>
+                <div className="cw-pref-member-hint">Onboarding preferences</div>
+              </div>
+            </div>
+            <div className="cw-pref-grid">
+              {preferenceRows.map((row) => {
+                const value = selectedMember[row.key]
+                const missing = !hasPreferenceValue(value)
+                return (
+                  <div key={row.key} className={`cw-pref-item${row.key === 'dietary' ? ' cw-pref-dietary' : ''}`}>
+                    <div className="cw-pref-label">
+                      <span className="cw-pref-emoji">{row.emoji}</span>
+                      {row.label}
+                    </div>
+                    {row.key === 'dietary' && dietaryValues(value).length > 0 ? (
+                      <div className="cw-pref-chip-row">
+                        {dietaryValues(value).map((item) => (
+                          <span key={item} className="cw-pref-chip">{item}</span>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className={`cw-pref-value${missing ? ' muted' : ''}`}>
+                        {formatPreferenceValue(value)}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="cw-pref-member-grid">
+            {members.map((m) => {
+            const name = m.display_name ?? 'Unknown'
+            const isYou = m.user_id === user.id
+            const hasPreferences = preferenceRows.some((row) => hasPreferenceValue(m[row.key]))
+
+            return (
+              <button
+                key={m.user_id}
+                className="cw-pref-member-card"
+                onClick={() => setSelectedMemberId(m.user_id)}
+              >
+                {renderAvatar(m)}
+                <div className="cw-pref-member-name">{name}{isYou ? ' (you)' : ''}</div>
+                <div className="cw-pref-member-hint">
+                  {hasPreferences ? 'View preferences' : 'Not set yet'}
+                </div>
+              </button>
+            )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function ChatWindow({ user, conversationId, isGroup }) {
   const [messages, setMessages] = useState([])
   const [inputText, setInputText] = useState('')
@@ -1020,6 +1370,7 @@ export default function ChatWindow({ user, conversationId, isGroup }) {
   const [members, setMembers] = useState([])
   const [userDisplayName, setUserDisplayName] = useState('')
   const [showDrawer, setShowDrawer] = useState(false)
+  const [showPreferences, setShowPreferences] = useState(false)
 
   const [pollOpen, setPollOpen] = useState(false)
   const [pollQuestion, setPollQuestion] = useState('')
@@ -1095,7 +1446,20 @@ export default function ChatWindow({ user, conversationId, isGroup }) {
     ])
     if (!convRes.error && convRes.data) setGroupMeta(convRes.data)
     if (!membersRes.error && membersRes.data) {
-      setMembers(membersRes.data.map((m) => ({ user_id: m.user_id, display_name: m.display_name ?? null })))
+      const baseMembers = membersRes.data.map((m) => ({ user_id: m.user_id, display_name: m.display_name ?? null }))
+      const ids = baseMembers.map((m) => m.user_id).filter(Boolean)
+      const { data: profiles } = ids.length
+        ? await supabase
+            .from('user_profiles')
+            .select('id,display_name,avatar_url,budget,destination,trip_style,pace_morning,pace_evening,activity_style,downtime,accommodation,dietary')
+            .in('id', ids)
+        : { data: [] }
+      const profilesById = new Map((profiles || []).map((p) => [p.id, p]))
+      setMembers(baseMembers.map((m) => ({
+        ...m,
+        ...(profilesById.get(m.user_id) || {}),
+        display_name: profilesById.get(m.user_id)?.display_name ?? m.display_name ?? null,
+      })))
     }
     setUserDisplayName(profileRes.data?.display_name ?? user.email.split('@')[0])
   }
@@ -1229,6 +1593,53 @@ export default function ChatWindow({ user, conversationId, isGroup }) {
   const visibleMessages = messages.filter((m) => !(m?.content || '').startsWith('__POLL_VOTE__'))
     .filter((m) => !(m?.content || '').startsWith('__TODO__'))
     .filter((m) => !(m?.content || '').startsWith('__TODO_'))
+    .filter((m) => !(m?.content || '').startsWith('__ITINERARY_ITEM__'))
+    .filter((m) => !(m?.content || '').startsWith('__ITINERARY_UPDATE__'))
+    .filter((m) => !(m?.content || '').startsWith('__ITINERARY_DELETE__'))
+    .filter((m) => !(m?.content || '').startsWith('__REACTION__'))
+
+  const reactionsByMessage = (() => {
+    const state = new Map()
+    for (const m of messages) {
+      if (!(m?.content || '').startsWith('__REACTION__')) continue
+      try {
+        const ev = JSON.parse((m.content || '').replace(/^__REACTION__/, ''))
+        if (!ev?.message_id || !ev?.emoji || !ev?.user_id) continue
+        const key = `${ev.message_id}:${ev.emoji}:${ev.user_id}`
+        state.set(key, !!ev.active)
+      } catch {
+        // ignore
+      }
+    }
+    const grouped = {}
+    for (const [key, active] of state.entries()) {
+      if (!active) continue
+      const [messageId, emoji, userId] = key.split(':')
+      grouped[messageId] ??= {}
+      grouped[messageId][emoji] ??= { count: 0, reacted: false }
+      grouped[messageId][emoji].count += 1
+      if (userId === user.id) grouped[messageId][emoji].reacted = true
+    }
+    return grouped
+  })()
+
+  const reactToMessage = async (messageId, emoji) => {
+    const current = reactionsByMessage[messageId]?.[emoji]?.reacted
+    await supabase.from('messages').insert({
+      conversation_id: conversationId,
+      role: 'user',
+      content: `__REACTION__${JSON.stringify({
+        message_id: messageId,
+        emoji,
+        user_id: user.id,
+        active: !current,
+        created_at: new Date().toISOString(),
+      })}`,
+      is_agent: false,
+      sender_id: user.id,
+      sender_display_name: userDisplayName || user.email.split('@')[0],
+    })
+  }
 
   // Quick derived count for banner (full state is built inside TodosModal)
   const openTodoCount = (() => {
@@ -1310,6 +1721,44 @@ export default function ChatWindow({ user, conversationId, isGroup }) {
     closePoll()
   }
 
+  const conciseItineraryDescription = (description) => {
+    const cleaned = (description || '')
+      .replace(/\s+/g, ' ')
+      .replace(/\bPrice:\s*\${1,4}\b/gi, '')
+      .trim()
+    if (cleaned.length <= 115) return cleaned
+    const sentence = cleaned.split(/(?<=[.!?])\s+/)[0]
+    if (sentence && sentence.length <= 140) return sentence
+    return `${cleaned.slice(0, 112).trim()}...`
+  }
+
+  const addToItinerary = async (item) => {
+    const displayName = userDisplayName || user.email.split('@')[0]
+    const payload = {
+      item_id: crypto.randomUUID(),
+      title: item.title,
+      description: conciseItineraryDescription(item.description),
+      original_description: item.description,
+      price: item.price || null,
+      created_at: new Date().toISOString(),
+      created_by: user.id,
+      created_by_name: displayName,
+    }
+    const { error } = await supabase.from('messages').insert({
+      conversation_id: conversationId,
+      role: 'user',
+      content: `__ITINERARY_ITEM__${JSON.stringify(payload)}`,
+      is_agent: false,
+      sender_id: user.id,
+      sender_display_name: displayName,
+    })
+    if (error) {
+      setSendError(error.message || 'Failed to add to itinerary.')
+      return false
+    }
+    return true
+  }
+
   return (
     <>
       <style>{styles}</style>
@@ -1320,7 +1769,11 @@ export default function ChatWindow({ user, conversationId, isGroup }) {
             {/* Clickable zone: icon + title + subtitle */}
             <div
               className="cw-header-clickable"
-              onClick={() => isGroup && setShowDrawer((v) => !v)}
+              onClick={() => {
+                if (!isGroup) return
+                setShowDrawer((v) => !v)
+                setShowPreferences(false)
+              }}
               title={isGroup ? 'View group info' : undefined}
               style={{ cursor: isGroup ? 'pointer' : 'default' }}
             >
@@ -1340,9 +1793,20 @@ export default function ChatWindow({ user, conversationId, isGroup }) {
 
             {/* Invite button — opens drawer scrolled to invite form */}
             {isGroup && (
-              <button className="cw-invite-btn" onClick={() => setShowDrawer(true)}>
-                Invite
-              </button>
+              <>
+                <button
+                  className="cw-pref-btn"
+                  onClick={() => setShowPreferences(true)}
+                >
+                  Preferences
+                </button>
+                <button
+                  className="cw-invite-btn"
+                  onClick={() => { setShowDrawer(true); setShowPreferences(false) }}
+                >
+                  Invite
+                </button>
+              </>
             )}
           </div>
 
@@ -1375,7 +1839,15 @@ export default function ChatWindow({ user, conversationId, isGroup }) {
                   (msg?.content || '').startsWith('__POLL__') ? (
                     <PollBubble key={msg.id} pollMessage={msg} messages={messages} conversationId={conversationId} currentUserId={user.id} currentUserDisplayName={userDisplayName || user.email.split('@')[0]} />
                   ) : (
-                    <MessageBubble key={msg.id} message={msg} isGroup={isGroup} currentUserId={user.id} />
+                    <MessageBubble
+                      key={msg.id}
+                      message={msg}
+                      isGroup={isGroup}
+                      currentUserId={user.id}
+                      onAddToItinerary={addToItinerary}
+                      reactions={reactionsByMessage[msg.id] || {}}
+                      onReact={reactToMessage}
+                    />
                   )
                 ))}
                 {isThinking && (
@@ -1486,6 +1958,14 @@ export default function ChatWindow({ user, conversationId, isGroup }) {
             open={showDrawer}
             onClose={() => setShowDrawer(false)}
             conversationId={conversationId}
+            user={user}
+            members={members}
+          />
+        )}
+        {isGroup && (
+          <PreferencesModal
+            open={showPreferences}
+            onClose={() => setShowPreferences(false)}
             user={user}
             members={members}
           />

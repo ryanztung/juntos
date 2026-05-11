@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 
 const AGENT_AVATAR_URL = '/agent-avatar.png'
+const REACTION_OPTIONS = ['👍', '👎', '❤️', '‼️', '❓']
 
 const styles = `
   .mb-wrapper {
@@ -81,6 +83,62 @@ const styles = `
     margin-top: 4px;
     padding: 0 2px;
   }
+  .mb-itinerary-actions {
+    margin-top: 6px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+  .mb-itinerary-label {
+    font-size: 11px;
+    color: #B9B9B9;
+    font-weight: 700;
+  }
+  .mb-itinerary-btn {
+    border: 1px solid rgba(16,108,84,0.25);
+    background: rgba(255,252,246,0.75);
+    color: #106C54;
+    border-radius: 999px;
+    padding: 3px 7px;
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+    font-family: 'Cabin', sans-serif;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mb-itinerary-btn:hover:not(:disabled) { background: rgba(16,108,84,0.12); }
+  .mb-itinerary-btn:disabled { opacity: 0.6; cursor: default; }
+  .mb-reactions {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-top: 5px;
+  }
+  .mb-reaction-btn {
+    border: 1px solid rgba(185,185,185,0.75);
+    background: rgba(255,252,246,0.85);
+    border-radius: 999px;
+    padding: 2px 6px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", 'Cabin', sans-serif;
+    line-height: 1.2;
+  }
+  .mb-reaction-btn.active {
+    border-color: #106C54;
+    background: rgba(16,108,84,0.12);
+  }
+  .mb-reaction-count {
+    margin-left: 2px;
+    color: #659B90;
+    font-size: 10px;
+    font-family: 'Cabin', sans-serif;
+    font-weight: 800;
+  }
 `
 
 function formatTime(dateStr) {
@@ -141,11 +199,73 @@ function AttachmentPreview({ attachments }) {
   )
 }
 
-import { useState } from 'react'
+function stripMarkdown(text) {
+  return (text || '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\*\*/g, '')
+    .trim()
+}
 
-export default function MessageBubble({ message, isGroup, currentUserId }) {
+function extractItinerarySuggestions(content) {
+  const raw = (content || '').split(/\n\s*(?:#{1,6}\s*)?(?:sources|citations|references)\s*:?\s*\n/i)[0] || ''
+  const casualMatches = Array.from(raw.matchAll(/\b(?:should we|we should|let'?s|lets|want to|could we)\s+(?:do|visit|try|check out|go to|add|plan)\s+([^?.!\n]{3,80})/gi))
+    .map((match) => {
+      const title = stripMarkdown(match[1]).replace(/^the\s+/i, '').trim()
+      return {
+        title: title.charAt(0).toUpperCase() + title.slice(1),
+        description: 'Suggested in group chat.',
+        price: null,
+      }
+    })
+    .filter((item) => item.title && !/\b(source|google|reddit|review|pacing|needs?|preferences?)\b/i.test(item.title))
+  const paragraphSplit = raw
+    .split(/(?=\s+(?:[-*]\s+|\d+\.\s+)?(?:\[[^\]]+\]\([^)]+\)|[A-Z][A-Za-z0-9&'.’\- ]{1,80})(?:\s*\([^)]*\))?:\s+)/g)
+  const lines = raw
+    .split('\n')
+    .flatMap((l) => paragraphSplit.length > 1 ? l.split(/(?=\s+(?:\[[^\]]+\]\([^)]+\)|[A-Z][A-Za-z0-9&'.’\- ]{1,80})(?:\s*\([^)]*\))?:\s+)/g) : [l])
+    .map((l) => l.trim())
+    .filter(Boolean)
+
+  const structured = lines
+    .map((line) => line.replace(/^[-*]\s+/, '').replace(/^\d+\.\s+/, '').trim())
+    .filter((line) => {
+      const plain = stripMarkdown(line)
+      const title = plain.split(':')[0]?.trim() || ''
+      const hasPrice = /\bPrice:\s*\${1,4}\b/i.test(line)
+      const placeSignal = /\b(restaurant|cafe|coffee|tavern|bar|grill|kitchen|bistro|house|beach|park|trail|museum|hotel|resort|market|tour|snorkel|surf|hike|lookout|waterfall|harbor|pier|garden|luau|spa|farm|ranch|bay|cove|point|road|center|village|mall|shop|winery|brewery|boat|cruise|walk|drive|excursion|activity|experience)\b/i.test(plain)
+      const titleLooksSpecific = /^[A-Z0-9][A-Za-z0-9&'.’\- ]{2,80}$/.test(title) && !/\b(the|this|these|for|why|because|overall|option|idea)\b/i.test(title)
+      const summaryTitle = /\b(pacing|needs?|preference|preferences|tradeoffs?|constraints?|budget|downtime|group fit|summary|vibe|style|dietary|accessibility|plan|approach|recommendation strategy)\b/i.test(title)
+      const sourceLike = /\b(source|sources|citation|citations|reference|references|google|reddit|review|reviews|tripadvisor|yelp)\b/i.test(title) || /^https?:\/\//i.test(plain)
+      if (!line.includes(':')) return false
+      if (/^#{1,6}\s+/.test(line)) return false
+      if (/^(group fit summary|sources|citations)$/i.test(line.replace(':', '').trim())) return false
+      if (/^based on everyone'?s preferences/i.test(line)) return false
+      if (summaryTitle) return false
+      if (sourceLike) return false
+      return hasPrice || (/^[\[]?[A-Z][^:]{2,90}:\s+.{14,}/.test(plain) && (placeSignal || titleLooksSpecific))
+    })
+    .map((line) => {
+      const cleaned = stripMarkdown(line)
+      const [titlePart, ...rest] = cleaned.split(':')
+      const price = cleaned.match(/\bPrice:\s*(\${1,4})\b/i)?.[1] || null
+      const description = rest.join(':').replace(/\bPrice:\s*\${1,4}\b/i, '').trim()
+      return {
+        title: titlePart.trim(),
+        description,
+        price,
+      }
+    })
+    .filter((item) => item.title && item.description)
+    .filter((item) => !/\b(source|sources|citation|citations|reference|references|google|reddit|review|reviews|tripadvisor|yelp)\b/i.test(`${item.title} ${item.description}`))
+  return [...casualMatches, ...structured]
+    .filter((item, index, arr) => arr.findIndex((x) => x.title.toLowerCase() === item.title.toLowerCase()) === index)
+    .slice(0, 12)
+}
+
+export default function MessageBubble({ message, isGroup, currentUserId, onAddToItinerary, reactions = {}, onReact }) {
   const isAgent = message.is_agent || message.role === 'assistant'
   const isOwn = !isAgent && message.sender_id === currentUserId
+  const [savedTitles, setSavedTitles] = useState(new Set())
 
   let side
   if (isAgent) side = 'agent'
@@ -159,6 +279,14 @@ export default function MessageBubble({ message, isGroup, currentUserId }) {
   }
 
   const showAvatar = isAgent || (!isOwn && (isGroup || isAgent))
+  const suggestions = (isAgent || isGroup) && onAddToItinerary ? extractItinerarySuggestions(message.content) : []
+
+  const handleAdd = async (item) => {
+    const ok = await onAddToItinerary(item)
+    if (ok !== false) {
+      setSavedTitles((prev) => new Set([...prev, item.title]))
+    }
+  }
 
   return (
     <>
@@ -179,6 +307,43 @@ export default function MessageBubble({ message, isGroup, currentUserId }) {
               ? <ReactMarkdown>{message.content}</ReactMarkdown>
               : message.content}
           </div>
+          {suggestions.length > 0 && (
+            <div className="mb-itinerary-actions">
+              <span className="mb-itinerary-label">Save</span>
+              {suggestions.map((item) => {
+                const saved = savedTitles.has(item.title)
+                return (
+                  <button
+                    key={item.title}
+                    className="mb-itinerary-btn"
+                    onClick={() => handleAdd(item)}
+                    disabled={saved}
+                    title={item.title}
+                  >
+                    {saved ? '✓' : '+'} {item.title}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          {onReact && (
+            <div className="mb-reactions">
+              {REACTION_OPTIONS.map((emoji) => {
+                const reaction = reactions[emoji]
+                return (
+                  <button
+                    key={emoji}
+                    className={`mb-reaction-btn${reaction?.reacted ? ' active' : ''}`}
+                    onClick={() => onReact(message.id, emoji)}
+                    title="React"
+                  >
+                    {emoji}
+                    {reaction?.count > 0 && <span className="mb-reaction-count">{reaction.count}</span>}
+                  </button>
+                )
+              })}
+            </div>
+          )}
           <div className="mb-timestamp">{formatTime(message.created_at)}</div>
         </div>
       </div>

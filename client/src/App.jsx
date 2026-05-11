@@ -4,6 +4,7 @@ import AuthForm from './components/AuthForm'
 import Onboarding from './components/Onboarding'
 import ConversationList from './components/ConversationList'
 import ChatWindow from './components/ChatWindow'
+import ItineraryPanel from './components/ItineraryPanel'
 
 const globalStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Cabin:wght@400;500;600;700&display=swap');
@@ -26,6 +27,7 @@ export default function App() {
   const [appState, setAppState] = useState('loading')
   const [session, setSession] = useState(null)
   const [activeConversation, setActiveConversation] = useState(null) // { id, isGroup }
+  const [activeView, setActiveView] = useState('chat')
 
   const resolving = useRef(false)
 
@@ -119,10 +121,12 @@ export default function App() {
 
   const handleSelectConversation = (id, isGroup = false) => {
     setActiveConversation({ id, isGroup })
+    setActiveView('chat')
   }
 
   const handleNewConversation = (id, isGroup = false) => {
     setActiveConversation({ id, isGroup })
+    setActiveView('chat')
   }
 
   if (appState === 'loading') {
@@ -173,11 +177,15 @@ export default function App() {
         <ConversationList
           user={session.user}
           activeConversationId={activeConversation?.id}
+          activeView={activeView}
           onSelect={handleSelectConversation}
           onNew={handleNewConversation}
+          onOpenItinerary={() => setActiveView('itinerary')}
         />
         <div style={{ flex: 1, overflow: 'hidden' }}>
-          {activeConversation ? (
+          {activeView === 'itinerary' ? (
+            <ItineraryPanel conversationId={activeConversation?.id} />
+          ) : activeConversation ? (
             <ChatWindow
               user={session.user}
               session={session}
