@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 const DAY_COUNT = 5
@@ -20,8 +20,9 @@ const ICON_OPTIONS = [
 
 const styles = `
   .it-page { height: 100%; background: #FFFCF6; font-family: 'Cabin', sans-serif; display: flex; flex-direction: column; }
-  .it-header { height: 66px; padding: 0 24px; background: #F3EFE8; border-bottom: 1px solid #B9B9B9; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-  .it-header-actions { display: flex; align-items: center; gap: 10px; }
+  .it-header { min-height: 66px; padding: 12px 16px; background: #F3EFE8; border-bottom: 1px solid #B9B9B9; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+  .it-header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .it-trip-length { display: flex; align-items: center; gap: 6px; color: #659B90; font-size: 12px; font-weight: 800; }
   .it-title { font-size: 18px; font-weight: 700; color: #106C54; }
   .it-sub { font-size: 12px; color: #659B90; margin-top: 2px; }
   .it-body { flex: 1; overflow: auto; padding: 20px; }
@@ -36,7 +37,7 @@ const styles = `
   .it-day-title { font-size: 14px; font-weight: 800; color: #106C54; }
   .it-day-count { font-size: 11px; color: #659B90; font-weight: 700; }
   .it-day-items { padding: 12px; display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 360px; }
-  .it-card { background: #FFFCF6; border: 1px solid rgba(185,185,185,0.75); border-radius: 14px; padding: 12px; cursor: grab; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+  .it-card { background: #FFFCF6; border: 1px solid rgba(185,185,185,0.75); border-radius: 14px; padding: 12px; cursor: grab; box-shadow: 0 2px 8px rgba(0,0,0,0.04); touch-action: none; }
   .it-card:active { cursor: grabbing; }
   .it-card-back { min-height: 150px; display: flex; flex-direction: column; gap: 9px; }
   .it-card-back-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #106C54; font-size: 13px; font-weight: 800; }
@@ -63,8 +64,8 @@ const styles = `
   .it-btn:hover:not(:disabled) { border-color: #106C54; background: rgba(16,108,84,0.06); }
   .it-btn:disabled { opacity: 0.45; cursor: default; }
   .it-day-empty { color: #B9B9B9; font-size: 12px; line-height: 1.4; border: 1px dashed #B9B9B9; border-radius: 12px; padding: 12px; text-align: center; }
-  .it-add-panel { margin-bottom: 16px; background: #F3EFE8; border: 1px solid #B9B9B9; border-radius: 16px; padding: 14px; display: grid; grid-template-columns: minmax(160px, 1fr) minmax(240px, 2fr) 120px 110px auto; gap: 10px; align-items: center; min-width: 980px; }
-  .it-add-input { border: 1px solid #B9B9B9; background: #FFFCF6; color: #106C54; border-radius: 10px; padding: 9px 10px; font-size: 13px; font-family: 'Cabin', sans-serif; outline: none; }
+  .it-add-panel { margin-bottom: 16px; background: #F3EFE8; border: 1px solid #B9B9B9; border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .it-add-panel-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }  .it-add-input { border: 1px solid #B9B9B9; background: #FFFCF6; color: #106C54; border-radius: 10px; padding: 9px 10px; font-size: 13px; font-family: 'Cabin', sans-serif; outline: none; }
   .it-add-input:focus { border-color: #106C54; }
   .it-trip-length { display: flex; align-items: center; gap: 7px; color: #659B90; font-size: 12px; font-weight: 800; }
   .it-trip-length-input { width: 58px; border: 1px solid #B9B9B9; background: #FFFCF6; color: #106C54; border-radius: 10px; padding: 7px 8px; font-size: 13px; font-family: 'Cabin', sans-serif; outline: none; }
@@ -152,6 +153,7 @@ export default function ItineraryPanel({ conversationId }) {
   const [newCard, setNewCard] = useState({ title: '', description: '', day: 1, icon: 'AUTO' })
   const [dayCount, setDayCount] = useState(DEFAULT_DAY_COUNT)
   const [expandedCardIds, setExpandedCardIds] = useState(new Set())
+  const touchDragRef = useRef({ itemId: null, startX: 0, startY: 0 })
 
   const mergeEvents = (messages) => {
     const itemMap = new Map()
@@ -354,6 +356,33 @@ export default function ItineraryPanel({ conversationId }) {
     })
   }
 
+  const handleTouchStart = (e, itemId) => {
+    touchDragRef.current.itemId = itemId
+    touchDragRef.current.startX = e.touches[0].clientX
+    touchDragRef.current.startY = e.touches[0].clientY
+  }
+
+  const handleTouchEnd = (e) => {
+    const { itemId } = touchDragRef.current
+    if (!itemId) return
+    const touch = e.changedTouches[0]
+    const el = document.elementFromPoint(touch.clientX, touch.clientY)
+    const dayEl = el?.closest('[data-day]')
+    if (dayEl) {
+      const day = Number(dayEl.getAttribute('data-day'))
+      if (day) moveItem(itemId, day)
+    }
+    touchDragRef.current.itemId = null
+    setDragOverDay(null)
+  }
+
+  const handleTouchMove = (e) => {
+    const touch = e.touches[0]
+    const el = document.elementFromPoint(touch.clientX, touch.clientY)
+    const dayEl = el?.closest('[data-day]')
+    setDragOverDay(dayEl ? Number(dayEl.getAttribute('data-day')) : null)
+  }
+  
   return (
     <>
       <style>{styles}</style>
@@ -400,32 +429,38 @@ export default function ItineraryPanel({ conversationId }) {
                     placeholder="Card title"
                     value={newCard.title}
                     onChange={(e) => setNewCard((prev) => ({ ...prev, title: e.target.value }))}
+                    style={{ width: '100%' }}
                   />
                   <input
                     className="it-add-input"
                     placeholder="Short note, time, or details"
                     value={newCard.description}
                     onChange={(e) => setNewCard((prev) => ({ ...prev, description: e.target.value }))}
+                    style={{ width: '100%' }}
                   />
-                  <select
-                    className="it-add-input"
-                    value={newCard.day}
-                    onChange={(e) => setNewCard((prev) => ({ ...prev, day: Number(e.target.value) }))}
-                  >
-                    {days.map((day) => <option key={day} value={day}>Day {day}</option>)}
-                  </select>
-                  <select
-                    className="it-add-input"
-                    value={newCard.icon}
-                    onChange={(e) => setNewCard((prev) => ({ ...prev, icon: e.target.value }))}
-                  >
-                    {ICON_OPTIONS.map((icon) => (
-                      <option key={icon.value} value={icon.value}>{icon.value === 'AUTO' ? `Auto ${suggestedIcon(newCard)}` : `${icon.value} ${icon.label}`}</option>
-                    ))}
-                  </select>
-                  <button className="it-add-btn" onClick={addCustomCard} disabled={!newCard.title.trim()}>
-                    Add
-                  </button>
+                  <div className="it-add-panel-row">
+                    <select
+                      className="it-add-input"
+                      value={newCard.day}
+                      onChange={(e) => setNewCard((prev) => ({ ...prev, day: Number(e.target.value) }))}
+                      style={{ flex: 1 }}
+                    >
+                      {days.map((day) => <option key={day} value={day}>Day {day}</option>)}
+                    </select>
+                    <select
+                      className="it-add-input"
+                      value={newCard.icon}
+                      onChange={(e) => setNewCard((prev) => ({ ...prev, icon: e.target.value }))}
+                      style={{ flex: 1 }}
+                    >
+                      {ICON_OPTIONS.map((icon) => (
+                        <option key={icon.value} value={icon.value}>{icon.value === 'AUTO' ? `Auto ${suggestedIcon(newCard)}` : `${icon.value} ${icon.label}`}</option>
+                      ))}
+                    </select>
+                    <button className="it-add-btn" onClick={addCustomCard} disabled={!newCard.title.trim()}>
+                      Add
+                    </button>
+                  </div>
                 </div>
               )}
               {items.length === 0 && !showAddForm ? (
@@ -441,11 +476,9 @@ export default function ItineraryPanel({ conversationId }) {
                     return (
                       <div
                         key={day}
+                        data-day={day}
                         className={`it-day${dragOverDay === day ? ' drag-over' : ''}`}
-                        onDragOver={(e) => {
-                          e.preventDefault()
-                          setDragOverDay(day)
-                        }}
+                        onDragOver={(e) => { e.preventDefault(); setDragOverDay(day) }}
                         onDragLeave={() => setDragOverDay(null)}
                         onDrop={() => handleDrop(day)}
                       >
@@ -466,10 +499,10 @@ export default function ItineraryPanel({ conversationId }) {
                                 className="it-card"
                                 draggable={!isExpanded}
                                 onDragStart={() => setDraggingItemId(item.item_id)}
-                                onDragEnd={() => {
-                                  setDraggingItemId(null)
-                                  setDragOverDay(null)
-                                }}
+                                onDragEnd={() => { setDraggingItemId(null); setDragOverDay(null) }}
+                                onTouchStart={(e) => { if (!isExpanded) handleTouchStart(e, item.item_id) }}
+                                onTouchMove={(e) => { if (!isExpanded) { e.preventDefault(); handleTouchMove(e) } }}
+                                onTouchEnd={(e) => { if (!isExpanded) handleTouchEnd(e) }}
                               >
                                 {isExpanded ? (
                                   <div className="it-card-back">

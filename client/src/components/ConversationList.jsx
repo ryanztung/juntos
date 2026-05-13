@@ -5,8 +5,9 @@ import ProfilePanel from './UserProfile'
 
 const styles = `
   .cl-sidebar {
-    width: 300px;
-    min-width: 300px;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
     background: #FFFCF6;
     border-right: 1px solid #B9B9B9;
     display: flex;

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">juntos</string>
+    <string name="title_activity_main">juntos</string>
+    <string name="package_name">com.juntos.app</string>
+    <string name="custom_url_scheme">com.juntos.app</string>
+</resources>

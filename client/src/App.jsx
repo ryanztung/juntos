@@ -13,10 +13,11 @@ const globalStyles = `
     background: #F3EFE8;
     color: #7A7A7A;
     font-family: 'Cabin', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    height: 100vh;
+    height: 100%;
     overflow: hidden;
   }
-  #root { height: 100vh; }
+  html { height: 100%; }
+  #root { height: 100%; }
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: #F3EFE8; }
   ::-webkit-scrollbar-thumb { background: #B9B9B9; border-radius: 3px; }
@@ -26,17 +27,23 @@ const globalStyles = `
 export default function App() {
   const [appState, setAppState] = useState('loading')
   const [session, setSession] = useState(null)
-  const [activeConversation, setActiveConversation] = useState(null) // { id, isGroup }
-  const [activeView, setActiveView] = useState('chat')
-
+  const [activeConversation, setActiveConversation] = useState(null)
+  const [activeView, setActiveView] = useState('chat') // 'chat' | 'itinerary'
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const resolving = useRef(false)
+
+  // Mobile detection — must be at top level, not inside conditionals
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handler)
+    handler()
+    return () => window.removeEventListener('resize', handler)
+  }, [])
 
   const withTimeout = async (promise, ms, label) => {
     let timeoutId
     const timeoutPromise = new Promise((_, reject) => {
-      timeoutId = setTimeout(() => {
-        reject(new Error(`${label} timed out`))
-      }, ms)
+      timeoutId = setTimeout(() => reject(new Error(`${label} timed out`)), ms)
     })
     try {
       return await Promise.race([promise, timeoutPromise])
@@ -55,25 +62,17 @@ export default function App() {
         setActiveConversation(null)
         return
       }
-
       const onboardingComplete = newSession.user.user_metadata?.onboarding_complete
       if (onboardingComplete) {
         setAppState('chat')
       } else {
-        // Fallback for users who onboarded before the metadata flag was introduced.
-        // One-time DB check.
         try {
           const { data: profile, error: profileError } = await withTimeout(
-            supabase
-              .from('user_profiles')
-              .select('id')
-              .eq('id', newSession.user.id)
-              .maybeSingle(),
+            supabase.from('user_profiles').select('id').eq('id', newSession.user.id).maybeSingle(),
             10000,
             'Loading profile'
           )
           if (profileError) {
-            console.error('[resolveSession] profile check error:', profileError)
             setAppState('onboarding')
           } else if (profile) {
             setAppState('chat')
@@ -81,12 +80,10 @@ export default function App() {
             setAppState('onboarding')
           }
         } catch (e) {
-          console.error('[resolveSession] profile check threw:', e)
           setAppState('onboarding')
         }
       }
     } catch (e) {
-      console.error('[resolveSession] error:', e)
       setAppState('auth')
     } finally {
       resolving.current = false
@@ -94,7 +91,6 @@ export default function App() {
   }
 
   useEffect(() => {
-    // Safety net: never stay on loading screen beyond 3 seconds
     const timeout = setTimeout(() => setAppState('auth'), 10000)
 
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -104,7 +100,7 @@ export default function App() {
       clearTimeout(timeout)
       setAppState('auth')
     })
-
+    
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, newSession) => resolveSession(newSession)
     )
@@ -115,9 +111,7 @@ export default function App() {
     }
   }, [])
 
-  const handleOnboardingComplete = () => {
-    setAppState('chat')
-  }
+  const handleOnboardingComplete = () => setAppState('chat')
 
   const handleSelectConversation = (id, isGroup = false) => {
     setActiveConversation({ id, isGroup })
@@ -134,19 +128,24 @@ export default function App() {
     setActiveView('itinerary')
   }
 
+  const handleBackToList = () => {
+    setActiveConversation(null)
+    setActiveView('chat')
+  }
+
+  // Derived layout flags
+  const hasActivePanel = !!activeConversation
+  const showSidebar = !isMobile || !hasActivePanel
+  const showPanel = !isMobile || hasActivePanel
+
   if (appState === 'loading') {
     return (
       <>
         <style>{globalStyles}</style>
         <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100vh',
-          background: '#F3EFE8',
-          color: '#7A7A7A',
-          gap: '12px',
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          justifyContent: 'center', height: '100%', background: '#F3EFE8',
+          color: '#7A7A7A', gap: '12px',
         }}>
           <div style={{ fontSize: '32px' }}>✈️</div>
           <div style={{ fontSize: '15px' }}>Loading Travel Agent...</div>
@@ -174,50 +173,96 @@ export default function App() {
     )
   }
 
-  // chat state
   return (
     <>
       <style>{globalStyles}</style>
-      <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-        <ConversationList
-          user={session.user}
-          activeConversationId={activeConversation?.id}
-          activeView={activeView}
-          onSelect={handleSelectConversation}
-          onNew={handleNewConversation}
-          onOpenItinerary={handleOpenItinerary}
-        />
-        <div style={{ flex: 1, overflow: 'hidden' }}>
-          {activeView === 'itinerary' ? (
-            <ItineraryPanel conversationId={activeConversation?.id} />
-          ) : activeConversation ? (
-            <ChatWindow
+      <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+
+        {/* Sidebar — full screen on mobile when no panel is active */}
+        {showSidebar && (
+          <div style={{
+            width: isMobile ? '100%' : 'auto',
+            flex: isMobile ? '1' : 'none',
+            overflow: 'hidden',
+            height: '100%',
+          }}>
+            <ConversationList
               user={session.user}
-              session={session}
-              conversationId={activeConversation.id}
-              isGroup={activeConversation.isGroup ?? false}
+              activeConversationId={activeConversation?.id}
+              activeView={activeView}
+              onSelect={handleSelectConversation}
+              onNew={handleNewConversation}
+              onOpenItinerary={handleOpenItinerary}
             />
-          ) : (
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '100%',
-              background: '#FFFCF6',
-              color: '#7A7A7A',
-              gap: '12px',
-            }}>
-              <div style={{ fontSize: '48px' }}>✈️</div>
-              <div style={{ fontSize: '20px', fontWeight: 600, color: '#106C54' }}>
-                Welcome to Juntos
+          </div>
+        )}
+
+        {/* Main panel — full screen on mobile when active */}
+        {showPanel && (
+          <div style={{ flex: 1, overflow: 'hidden', height: '100%', display: 'flex', flexDirection: 'column' }}>
+            {activeConversation ? (
+              activeView === 'itinerary' ? (
+                <>
+                  {/* Itinerary back bar — mobile only */}
+                  {isMobile && (
+                    <div style={{
+                      height: '52px',
+                      background: '#F3EFE8',
+                      borderBottom: '1px solid #B9B9B9',
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '0 16px',
+                      flexShrink: 0,
+                    }}>
+                      <button
+                        onClick={handleBackToList}
+                        style={{
+                          background: 'transparent', border: 'none', cursor: 'pointer',
+                          color: '#106C54', fontSize: '22px', padding: '0 8px 0 0',
+                          lineHeight: 1, fontFamily: 'Cabin, sans-serif',
+                        }}
+                      >
+                        ‹
+                      </button>
+                      <span style={{
+                        fontSize: '15px', fontWeight: 700,
+                        color: '#106C54', fontFamily: 'Cabin, sans-serif',
+                      }}>
+                        Itinerary
+                      </span>
+                    </div>
+                  )}
+                  <div style={{ flex: 1, overflow: 'auto' }}>
+                    <ItineraryPanel conversationId={activeConversation.id} />
+                  </div>
+                </>
+              ) : (
+                <ChatWindow
+                  user={session.user}
+                  session={session}
+                  conversationId={activeConversation.id}
+                  isGroup={activeConversation.isGroup ?? false}
+                  onBack={isMobile ? handleBackToList : undefined}
+                />
+              )
+            ) : (
+              /* Desktop welcome screen — only shown on desktop when nothing selected */
+              <div style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center',
+                justifyContent: 'center', height: '100%', background: '#FFFCF6',
+                color: '#7A7A7A', gap: '12px',
+              }}>
+                <div style={{ fontSize: '48px' }}>✈️</div>
+                <div style={{ fontSize: '20px', fontWeight: 600, color: '#106C54' }}>
+                  Welcome to Juntos
+                </div>
+                <div style={{ fontSize: '14px' }}>
+                  Select a conversation or start a new one
+                </div>
               </div>
-              <div style={{ fontSize: '14px' }}>
-                Select a conversation or start a new one
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
     </>
   )

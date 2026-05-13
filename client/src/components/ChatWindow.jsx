@@ -467,14 +467,22 @@ const styles = `
     overflow: hidden;
   }
   .cw-header {
-    padding: 0 16px 0 20px;
-    height: 66px;
+    padding: 0 12px 0 16px;
+    min-height: 66px;
     border-bottom: 1px solid #B9B9B9;
     background: #F3EFE8;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 6px;
     flex-shrink: 0;
+    flex-wrap: nowrap;
+  }
+  @media (max-width: 500px) {
+    .cw-pref-btn .cw-btn-label { display: none; }
+    .cw-invite-btn .cw-btn-label { display: none; }
+    .cw-pref-btn .cw-icon-only { display: inline !important; }
+    .cw-invite-btn .cw-icon-only { display: inline !important; }
+    .cw-header-sub-group { display: none; }
   }
   .cw-header-clickable {
     display: flex;
@@ -583,19 +591,28 @@ const styles = `
   }
   .cw-input {
     flex: 1;
+    min-width: 0;
+    width: 0;
     background: #FFFCF6;
     border: 1px solid #B9B9B9;
     border-radius: 12px;
-    padding: 11px 14px;
-    font-size: 14px;
+    padding: 11px 12px;
+    font-size: 13px;
     color: #7A7A7A;
     outline: none;
     resize: none;
-    min-height: 44px;
-    max-height: 140px;
+    height: 44px;
+    max-height: 44px;
+    overflow: hidden;
     font-family: 'Cabin', sans-serif;
     transition: border-color 0.2s;
     line-height: 1.5;
+    white-space: nowrap;
+  }
+  .cw-input:focus {
+    max-height: 140px;
+    overflow-y: auto;
+    white-space: pre-wrap;
   }
   .cw-input:focus { border-color: #106C54; }
   .cw-input::placeholder { color: #B9B9B9; }
@@ -716,16 +733,28 @@ const styles = `
     transition: color 0.15s; -webkit-appearance: none; appearance: none;
   }
   .cw-attachment-chip-remove:hover { color: #dc2626; }
-  .cw-drawer {
-    width: 272px; min-width: 272px;
+.cw-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    height: 100%;
+    width: 288px;
     background: #FFFCF6;
     border-left: 1px solid #B9B9B9;
-    display: flex; flex-direction: column;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
-    transition: width 0.22s ease, min-width 0.22s ease, opacity 0.22s ease;
+    transition: transform 0.25s ease, opacity 0.25s ease;
+    transform: translateX(0);
     opacity: 1;
+    z-index: 40;
+    box-shadow: -4px 0 20px rgba(0,0,0,0.10);
   }
-  .cw-drawer.closed { width: 0; min-width: 0; opacity: 0; pointer-events: none; }
+  .cw-drawer.closed {
+    transform: translateX(100%);
+    opacity: 0;
+    pointer-events: none;
+  }
   .cw-drawer-header {
     padding: 18px 16px 14px;
     border-bottom: 1px solid #B9B9B9;
@@ -1043,31 +1072,33 @@ const styles = `
     font-size: 12px;
   }
 
-  .cw-todos-banner {
-    margin: 0 24px 12px;
+.cw-todos-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     background: rgba(16,108,84,0.08);
     border: 1px solid rgba(16,108,84,0.25);
     color: #106C54;
-    border-radius: 10px;
-    padding: 10px 12px;
-    font-size: 13px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    cursor: pointer;
-    user-select: none;
-  }
-  .cw-todos-banner:hover {
-    background: rgba(16,108,84,0.12);
-  }
-  .cw-todos-banner-title {
-    font-weight: 700;
-  }
-  .cw-todos-banner-meta {
+    border-radius: 999px;
+    padding: 5px 12px;
     font-size: 12px;
-    color: rgba(16,108,84,0.85);
+    font-weight: 700;
+    cursor: pointer;
+    font-family: 'Cabin', sans-serif;
+    transition: background 0.15s;
     white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .cw-todos-btn:hover { background: rgba(16,108,84,0.14); }
+  .cw-todos-badge {
+    background: #106C54;
+    color: #fff;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 1px 6px;
+    min-width: 18px;
+    text-align: center;
   }
 `
 
@@ -1118,9 +1149,19 @@ function MembersDrawer({ open, onClose, conversationId, user, members, onMembers
       setFoundUser(null); setEmailInput('')
     }
   }
-
+  
   return (
-    <div className={`cw-drawer${open ? '' : ' closed'}`}>
+    <>
+      {open && (
+        <div
+          onClick={onClose}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 39,
+            background: 'rgba(0,0,0,0.18)',
+          }}
+        />
+      )}
+      <div className={`cw-drawer${open ? '' : ' closed'}`}>
       <div className="cw-drawer-header">
         <span className="cw-drawer-title">Group Info</span>
         <button className="cw-drawer-close" onClick={onClose} aria-label="Close">×</button>
@@ -1178,6 +1219,7 @@ function MembersDrawer({ open, onClose, conversationId, user, members, onMembers
         {msg && <div className={`cw-inv-msg ${msg.type}`}>{msg.text}</div>}
       </div>
     </div>
+    </>
   )
 }
 
@@ -1357,7 +1399,7 @@ function PreferencesModal({ open, onClose, user, members }) {
   )
 }
 
-export default function ChatWindow({ user, conversationId, isGroup }) {
+export default function ChatWindow({ user, conversationId, isGroup, onBack }) {
   const [messages, setMessages] = useState([])
   const [inputText, setInputText] = useState('')
   const [isThinking, setIsThinking] = useState(false)
@@ -1796,6 +1838,26 @@ export default function ChatWindow({ user, conversationId, isGroup }) {
         {/* ── Main chat column ── */}
         <div className="cw-main">
           <div className="cw-header">
+            {/* Back button — mobile only */}
+            {onBack && (
+              <button
+                onClick={onBack}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#106C54',
+                  fontSize: '22px',
+                  padding: '0 8px 0 0',
+                  lineHeight: 1,
+                  flexShrink: 0,
+                  fontFamily: 'Cabin, sans-serif',
+                }}
+                aria-label="Back"
+              >
+                ‹
+              </button>
+            )}
             {/* Clickable zone: icon + title + subtitle */}
             <div
               className="cw-header-clickable"
@@ -1825,30 +1887,31 @@ export default function ChatWindow({ user, conversationId, isGroup }) {
             {isGroup && (
               <>
                 <button
+                  className="cw-todos-btn"
+                  onClick={() => setTodosOpen(true)}
+                  title="To-dos"
+                >
+                  ✅ <span className="cw-todos-badge">{openTodoCount}</span>
+                </button>
+                <button
                   className="cw-pref-btn"
                   onClick={() => setShowPreferences(true)}
+                  title="Preferences"
                 >
-                  Preferences
+                  <span className="cw-btn-label">Preferences</span>
+                  <span style={{ display: 'none' }} className="cw-icon-only">⚙️</span>
                 </button>
                 <button
                   className="cw-invite-btn"
                   onClick={() => { setShowDrawer(true); setShowPreferences(false) }}
+                  title="Invite"
                 >
-                  Invite
+                  <span className="cw-btn-label">Invite</span>
+                  <span style={{ display: 'none' }} className="cw-icon-only">+</span>
                 </button>
               </>
             )}
           </div>
-
-          {isGroup && (
-            <div className="cw-todos-banner" onClick={() => setTodosOpen(true)}>
-              <div>
-                <div className="cw-todos-banner-title">Shared to-dos</div>
-                <div className="cw-todos-banner-meta">{openTodoCount} open</div>
-              </div>
-              <div className="cw-todos-banner-meta">Click to view</div>
-            </div>
-          )}
 
           <div className="cw-messages">
             {loadingMessages ? (
