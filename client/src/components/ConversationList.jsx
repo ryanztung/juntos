@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import ProfilePanel from './UserProfile'
 
-
 const styles = `
   .cl-sidebar {
     width: 100%;
@@ -106,6 +105,34 @@ const styles = `
     border-color: rgba(16,108,84,0.25);
   }
   .cl-item-icon { font-size: 14px; flex-shrink: 0; }
+
+  .cl-group-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: rgba(16,108,84,0.12);
+    border: 1px solid rgba(16,108,84,0.18);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #106C54;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .cl-group-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .cl-group-avatar-fallback {
+    background: rgba(16,108,84,0.12);
+  }
+    
   .cl-item-body { flex: 1; min-width: 0; }
   .cl-item-title {
     font-size: 13px;
@@ -255,6 +282,24 @@ const styles = `
   .cl-modal-btn-create:hover:not(:disabled) { background: #659B90; }
 `
 
+function GroupAvatar({ groupName, avatarUrl }) {
+  const initial = (groupName || 'G')[0]?.toUpperCase() || 'G'
+
+  if (avatarUrl) {
+    return (
+      <div className="cl-group-avatar">
+        <img src={avatarUrl} alt={groupName || 'Group'} />
+      </div>
+    )
+  }
+
+  return (
+    <div className="cl-group-avatar cl-group-avatar-fallback">
+      {initial}
+    </div>
+  )
+}
+
 function formatDate(dateStr) {
   const date = new Date(dateStr)
   const now = new Date()
@@ -359,7 +404,16 @@ function CreateGroupModal({ user, onCreated, onClose }) {
   )
 }
 
-export default function ConversationList({ user, activeConversationId, activeView, onSelect, onNew, onOpenItinerary }) {
+export default function ConversationList({
+  user,
+  activeConversationId,
+  activeView,
+  onSelect,
+  onNew,
+  onOpenItinerary,
+  refreshToken,
+  onConversationChanged,
+}) {
   const [soloConversations, setSoloConversations] = useState([])
   const [groupConversations, setGroupConversations] = useState([])
   const [pendingInvites, setPendingInvites] = useState([])
@@ -376,7 +430,7 @@ export default function ConversationList({ user, activeConversationId, activeVie
         supabase.removeChannel(inviteChannelRef.current)
       }
     }
-  }, [user.id])
+  }, [user.id, refreshToken])
 
   const fetchAll = async () => {
     setLoading(true)
@@ -454,6 +508,7 @@ export default function ConversationList({ user, activeConversationId, activeVie
     if (!error && data) {
       setSoloConversations((prev) => [data, ...prev])
       onNew(data.id, false)
+      onConversationChanged?.()
     }
     setCreating(false)
   }
@@ -528,7 +583,9 @@ export default function ConversationList({ user, activeConversationId, activeVie
                       className={`cl-item${activeConversationId === conv.id && activeView === 'chat' ? ' active' : ''}`}
                       onClick={() => onSelect(conv.id, false)}
                     >
-                      <span className="cl-item-icon">🤖</span>
+                      <div className="cl-group-avatar cl-group-avatar-fallback" aria-hidden="true">
+                        ✈️
+                      </div>
                       <div className="cl-item-body">
                         <div className="cl-item-title">{conv.title || 'Untitled Conversation'}</div>
                         <div className="cl-item-date">{formatDate(conv.created_at)}</div>
@@ -555,7 +612,7 @@ export default function ConversationList({ user, activeConversationId, activeVie
                       className={`cl-item${activeConversationId === conv.id && activeView === 'chat' ? ' active' : ''}`}
                       onClick={() => onSelect(conv.id, true)}
                     >
-                      <span className="cl-item-icon">👥</span>
+                      <GroupAvatar groupName={conv.group_name} avatarUrl={conv.group_avatar_url} />
                       <div className="cl-item-body">
                         <div className="cl-item-title">{conv.group_name || 'Unnamed Group'}</div>
                         <div className="cl-item-date">{formatDate(conv.created_at)}</div>

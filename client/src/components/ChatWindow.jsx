@@ -16,13 +16,30 @@ function avatarColor(str) {
   return AVATAR_COLORS[h % AVATAR_COLORS.length]
 }
 
-function TodosModal({ open, onClose, conversationId, user, members, userDisplayName, messages }) {
+function TodosModal({
+  open,
+  onClose,
+  conversationId,
+  user,
+  members,
+  userDisplayName,
+  messages,
+  groupName,
+  groupAvatarUrl,
+  onGroupUpdated,
+}) {
   const [text, setText] = useState('')
   const [assigneeInput, setAssigneeInput] = useState('')
   const [assigneeId, setAssigneeId] = useState(null)
   const [assigneeActiveIndex, setAssigneeActiveIndex] = useState(0)
   const [dueDate, setDueDate] = useState('')
   const [err, setErr] = useState('')
+
+  const [groupNameInput, setGroupNameInput] = useState('')
+  const [groupAvatarPreview, setGroupAvatarPreview] = useState('')
+  const [savingGroupInfo, setSavingGroupInfo] = useState(false)
+  const [uploadingGroupAvatar, setUploadingGroupAvatar] = useState(false)
+  const groupAvatarFileRef = useRef(null)
 
   useEffect(() => {
     if (!open) return
@@ -32,7 +49,84 @@ function TodosModal({ open, onClose, conversationId, user, members, userDisplayN
     setAssigneeActiveIndex(0)
     setDueDate('')
     setErr('')
-  }, [open])
+    setGroupNameInput(groupName || '')
+    setGroupAvatarPreview(groupAvatarUrl || '')
+  }, [open, groupName, groupAvatarUrl])
+
+  const saveGroupInfo = async (nextName, nextAvatarUrl) => {
+    const cleanName = (nextName || '').trim()
+    if (!cleanName) {
+      setErr('Group name cannot be empty.')
+      return false
+    }
+
+    setSavingGroupInfo(true)
+    setErr('')
+    const { error } = await supabase
+      .from('conversations')
+      .update({
+        group_name: cleanName,
+        group_avatar_url: nextAvatarUrl || null,
+      })
+      .eq('id', conversationId)
+
+    setSavingGroupInfo(false)
+
+    if (error) {
+      setErr(error.message || 'Failed to save group info.')
+      return false
+    }
+
+    onGroupUpdated?.()
+    return true
+  }
+
+  const handleGroupAvatarUpload = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      setErr('Please upload an image file.')
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setErr('Image must be under 5MB.')
+      return
+    }
+
+    setErr('')
+    setUploadingGroupAvatar(true)
+
+    try {
+      const ext = file.name.split('.').pop() || 'jpg'
+      const path = `${conversationId}/${crypto.randomUUID()}.${ext}`
+
+      const { data, error: uploadError } = await supabase.storage
+        .from('group-avatars')
+        .upload(path, file, {
+          contentType: file.type,
+          upsert: true,
+        })
+
+      if (uploadError) throw uploadError
+
+      const { data: pub } = supabase.storage
+        .from('group-avatars')
+        .getPublicUrl(data.path)
+
+      const url = `${pub.publicUrl}?t=${Date.now()}`
+      setGroupAvatarPreview(url)
+
+      const ok = await saveGroupInfo(groupNameInput || groupName || 'Group Chat', url)
+      if (!ok) return
+    } catch (error) {
+      setErr(error.message || 'Avatar upload failed.')
+    } finally {
+      setUploadingGroupAvatar(false)
+    }
+  }
 
   const memberOptions = (members || []).map((m) => ({
     user_id: m.user_id,
@@ -202,7 +296,7 @@ function TodosModal({ open, onClose, conversationId, user, members, userDisplayN
   return (
     <div className="cw-modal-backdrop" onClick={onClose}>
       <div className="cw-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="cw-modal-title">Shared to-dos</div>
+        <div className="cw-modal-title">Shared to-do's</div>
 
         <div className="cw-modal-label">New task</div>
         <input
@@ -294,7 +388,7 @@ function TodosModal({ open, onClose, conversationId, user, members, userDisplayN
 
         <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {todos.length === 0 ? (
-            <div style={{ fontSize: '13px', color: '#64748b' }}>No to-dos yet.</div>
+            <div style={{ fontSize: '13px', color: '#64748b' }}>No to-do's yet.</div>
           ) : (
             todos.map((t) => (
               <div key={t.todo_id} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '10px 10px', border: '1px solid #B9B9B9', borderRadius: '12px', background: '#fff' }}>
@@ -478,11 +572,20 @@ const styles = `
     flex-wrap: nowrap;
   }
   @media (max-width: 500px) {
-    .cw-pref-btn .cw-btn-label { display: none; }
-    .cw-invite-btn .cw-btn-label { display: none; }
-    .cw-pref-btn .cw-icon-only { display: inline !important; }
-    .cw-invite-btn .cw-icon-only { display: inline !important; }
-    .cw-header-sub-group { display: none; }
+    .cw-header {
+      padding: 0 10px 0 12px;
+      gap: 8px;
+    }
+
+    .cw-pref-btn,
+    .cw-invite-btn {
+      padding: 7px 11px;
+      font-size: 12px;
+    }
+
+    .cw-header-sub-group {
+      display: none;
+    }
   }
   .cw-header-clickable {
     display: flex;
@@ -500,13 +603,21 @@ const styles = `
   .cw-header-icon {
     width: 34px;
     height: 34px;
-    background: rgba(101,155,144,0.2);
+    background: rgba(14, 116, 144, 0.2);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 16px;
+    overflow: hidden;
     flex-shrink: 0;
+  }
+
+  .cw-header-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
   }
   .cw-header-info { flex: 1; min-width: 0; }
   .cw-header-title { font-size: 15px; font-weight: 600; color: #106C54; }
@@ -1072,33 +1183,37 @@ const styles = `
     font-size: 12px;
   }
 
-.cw-todos-btn {
+  .cw-todos-btn {
+    background: #FFFCF6;
+    border: 1px solid #B9B9B9;
+    border-radius: 8px;
+    padding: 7px 13px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #106C54;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    flex-shrink: 0;
+    white-space: nowrap;
+    font-family: 'Cabin', sans-serif;
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: rgba(16,108,84,0.08);
-    border: 1px solid rgba(16,108,84,0.25);
-    color: #106C54;
-    border-radius: 999px;
-    padding: 5px 12px;
-    font-size: 12px;
-    font-weight: 700;
-    cursor: pointer;
-    font-family: 'Cabin', sans-serif;
-    transition: background 0.15s;
-    white-space: nowrap;
-    flex-shrink: 0;
   }
-  .cw-todos-btn:hover { background: rgba(16,108,84,0.14); }
+  .cw-todos-btn:hover {
+    border-color: #106C54;
+    background: rgba(16,108,84,0.06);
+  }
   .cw-todos-badge {
     background: #106C54;
     color: #fff;
     border-radius: 999px;
     font-size: 10px;
-    font-weight: 800;
-    padding: 1px 6px;
-    min-width: 18px;
+    font-weight: 700;
+    padding: 2px 6px;
+    min-width: 16px;
     text-align: center;
+    line-height: 1;
   }
 `
 
@@ -1108,28 +1223,148 @@ function fileIcon(fileType) {
   return '📎'
 }
 
-function MembersDrawer({ open, onClose, conversationId, user, members, onMembersUpdated }) {
+function MembersDrawer({
+  open,
+  onClose,
+  conversationId,
+  user,
+  members,
+  userDisplayName,
+  messages,
+  groupName,
+  groupAvatarUrl,
+  onGroupUpdated,
+}) {
   const [emailInput, setEmailInput] = useState('')
   const [looking, setLooking] = useState(false)
   const [foundUser, setFoundUser] = useState(null)
   const [sending, setSending] = useState(false)
   const [msg, setMsg] = useState(null)
 
+  const [groupNameInput, setGroupNameInput] = useState('')
+  const [groupAvatarPreview, setGroupAvatarPreview] = useState('')
+  const [savingGroupInfo, setSavingGroupInfo] = useState(false)
+  const [uploadingGroupAvatar, setUploadingGroupAvatar] = useState(false)
+  const groupAvatarFileRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    setEmailInput('')
+    setFoundUser(null)
+    setMsg(null)
+    setGroupNameInput(groupName || '')
+    setGroupAvatarPreview(groupAvatarUrl || '')
+  }, [open, groupName, groupAvatarUrl])
+
+  const saveGroupInfo = async (nextName, nextAvatarUrl) => {
+    const cleanName = (nextName || '').trim()
+    if (!cleanName) {
+      setMsg?.({ type: 'error', text: 'Group name cannot be empty.' })
+      return false
+    }
+
+    setSavingGroupInfo(true)
+    setMsg(null)
+
+    const { error } = await supabase
+      .from('conversations')
+      .update({
+        group_name: cleanName,
+        group_avatar_url: nextAvatarUrl || null,
+      })
+      .eq('id', conversationId)
+
+    setSavingGroupInfo(false)
+
+    if (error) {
+      setMsg({ type: 'error', text: error.message || 'Failed to save group info.' })
+      return false
+    }
+
+    onGroupUpdated?.()
+    return true
+  }
+
+  const handleGroupAvatarUpload = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      setMsg({ type: 'error', text: 'Please upload an image file.' })
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setMsg({ type: 'error', text: 'Image must be under 5MB.' })
+      return
+    }
+
+    setMsg(null)
+    setUploadingGroupAvatar(true)
+
+    try {
+      const ext = file.name.split('.').pop() || 'jpg'
+      const path = `${conversationId}/${crypto.randomUUID()}.${ext}`
+
+      const { data, error: uploadError } = await supabase.storage
+        .from('group-avatars')
+        .upload(path, file, {
+          contentType: file.type,
+          upsert: true,
+        })
+
+      if (uploadError) throw uploadError
+
+      const { data: pub } = supabase.storage
+        .from('group-avatars')
+        .getPublicUrl(data.path)
+
+      const url = `${pub.publicUrl}?t=${Date.now()}`
+      setGroupAvatarPreview(url)
+
+      const ok = await saveGroupInfo(groupNameInput || groupName || 'Group Chat', url)
+      if (!ok) return
+    } catch (error) {
+      setMsg({ type: 'error', text: error.message || 'Avatar upload failed.' })
+    } finally {
+      setUploadingGroupAvatar(false)
+    }
+  }
+
   // Reset invite form whenever drawer opens
   useEffect(() => {
-    if (open) { setEmailInput(''); setFoundUser(null); setMsg(null) }
+    if (open) {
+      setEmailInput('')
+      setFoundUser(null)
+      setMsg(null)
+    }
   }, [open])
 
   const handleLookup = async () => {
     const email = emailInput.trim().toLowerCase()
     if (!email) return
-    setLooking(true); setFoundUser(null); setMsg(null)
+    setLooking(true)
+    setFoundUser(null)
+    setMsg(null)
+
     const { data, error } = await supabase.rpc('lookup_user_by_email', { p_email: email })
     setLooking(false)
-    if (error || !data?.length) { setMsg({ type: 'error', text: 'No account found with that email.' }); return }
+
+    if (error || !data?.length) {
+      setMsg({ type: 'error', text: 'No account found with that email.' })
+      return
+    }
+
     const found = data[0]
-    if (found.user_id === user.id) { setMsg({ type: 'error', text: "That's you!" }); return }
-    if (members.some((m) => m.user_id === found.user_id)) { setMsg({ type: 'error', text: 'Already a member.' }); return }
+    if (found.user_id === user.id) {
+      setMsg({ type: 'error', text: "That's you!" })
+      return
+    }
+    if (members.some((m) => m.user_id === found.user_id)) {
+      setMsg({ type: 'error', text: 'Already a member.' })
+      return
+    }
     setFoundUser(found)
   }
 
@@ -1142,83 +1377,275 @@ function MembersDrawer({ open, onClose, conversationId, user, members, onMembers
       invited_user_id: foundUser.user_id,
     })
     setSending(false)
+
     if (error) {
       setMsg({ type: 'error', text: error.code === '23505' ? 'Invite already sent.' : error.message })
     } else {
       setMsg({ type: 'success', text: `Invite sent to ${foundUser.display_name}!` })
-      setFoundUser(null); setEmailInput('')
+      setFoundUser(null)
+      setEmailInput('')
     }
   }
-  
+
   return (
     <>
       {open && (
         <div
           onClick={onClose}
           style={{
-            position: 'fixed', inset: 0, zIndex: 39,
+            position: 'fixed',
+            inset: 0,
+            zIndex: 39,
             background: 'rgba(0,0,0,0.18)',
           }}
         />
       )}
       <div className={`cw-drawer${open ? '' : ' closed'}`}>
-      <div className="cw-drawer-header">
-        <span className="cw-drawer-title">Group Info</span>
-        <button className="cw-drawer-close" onClick={onClose} aria-label="Close">×</button>
-      </div>
-
-      <div className="cw-drawer-body">
-        {/* Members list */}
-        <div className="cw-drawer-section-label">
-          Members — {members.length}
+        <div className="cw-drawer-header">
+          <span className="cw-drawer-title">Group Info</span>
+          <button className="cw-drawer-close" onClick={onClose} aria-label="Close">×</button>
         </div>
-        {members.map((m) => {
-          const name = m.display_name ?? '?'
-          const isYou = m.user_id === user.id
-          return (
-            <div key={m.user_id} className="cw-member-row">
-              <div
-                className="cw-member-avatar"
-                style={{ background: avatarColor(name) }}
-              >
-                {name[0]?.toUpperCase()}
-              </div>
-              <span className="cw-member-name">{name}</span>
-              {isYou && <span className="cw-member-you">you</span>}
-            </div>
-          )
-        })}
 
-        {/* Invite section */}
-        <hr className="cw-drawer-divider" />
-        <div className="cw-drawer-section-label">Invite by Email</div>
-        <input
-          className="cw-inv-input"
-          type="email"
-          placeholder="Enter email address"
-          value={emailInput}
-          onChange={(e) => { setEmailInput(e.target.value); setFoundUser(null); setMsg(null) }}
-          onKeyDown={(e) => { if (e.key === 'Enter') handleLookup() }}
-          disabled={looking || sending}
-        />
-        <button
-          className="cw-inv-lookup-btn"
-          onClick={handleLookup}
-          disabled={!emailInput.trim() || looking || sending}
-        >
-          {looking ? 'Looking up...' : 'Look Up User'}
-        </button>
-        {foundUser && (
-          <>
-            <div className="cw-inv-found">Found: <strong>{foundUser.display_name}</strong></div>
-            <button className="cw-inv-send-btn" onClick={handleInvite} disabled={sending}>
-              {sending ? 'Sending...' : 'Send Invite'}
+        <div className="cw-drawer-body">
+          <div className="cw-drawer-section-label">Group settings</div>
+
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '14px' }}>
+            <button
+              type="button"
+              onClick={() => groupAvatarFileRef.current?.click()}
+              style={{
+                width: '64px',
+                height: '64px',
+                borderRadius: '50%',
+                border: '1px solid #B9B9B9',
+                background: '#F3EFE8',
+                overflow: 'hidden',
+                position: 'relative',
+                padding: 0,
+                cursor: 'pointer',
+                flexShrink: 0,
+              }}
+            >
+              {groupAvatarPreview ? (
+                <img
+                  src={groupAvatarPreview}
+                  alt="Group avatar"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#106C54',
+                    fontWeight: 700,
+                    fontSize: '22px',
+                  }}
+                >
+                  {(groupNameInput || 'G')[0]?.toUpperCase() || 'G'}
+                </div>
+              )}
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: 'rgba(0,0,0,0.25)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#fff',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  opacity: uploadingGroupAvatar ? 1 : 0,
+                  transition: 'opacity 0.15s',
+                }}
+              >
+                {uploadingGroupAvatar ? 'Uploading...' : 'Change'}
+              </div>
             </button>
-          </>
-        )}
-        {msg && <div className={`cw-inv-msg ${msg.type}`}>{msg.text}</div>}
+
+            <div style={{ flex: 1 }}>
+              <div className="cw-modal-label">Group name</div>
+              <input
+                className="cw-modal-input"
+                value={groupNameInput}
+                onChange={(e) => setGroupNameInput(e.target.value)}
+                placeholder="Group name"
+              />
+              <input
+                ref={groupAvatarFileRef}
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={handleGroupAvatarUpload}
+                disabled={uploadingGroupAvatar}
+              />
+            </div>
+          </div>
+
+          <div className="cw-modal-actions" style={{ justifyContent: 'space-between', marginBottom: '12px' }}>
+            <button
+              className="cw-modal-btn"
+              onClick={() => groupAvatarFileRef.current?.click()}
+              disabled={uploadingGroupAvatar}
+            >
+              {uploadingGroupAvatar ? 'Uploading...' : 'Upload photo'}
+            </button>
+            <button
+              className="cw-modal-btn primary"
+              onClick={() => saveGroupInfo(groupNameInput, groupAvatarPreview)}
+              disabled={savingGroupInfo || uploadingGroupAvatar || !groupNameInput.trim()}
+            >
+              {savingGroupInfo ? 'Saving...' : 'Save changes'}
+            </button>
+          </div>
+
+          <div className="cw-drawer-section-label">
+            Members — {members.length}
+          </div>
+          {members.map((m) => {
+            const name = m.display_name ?? '?'
+            const isYou = m.user_id === user.id
+            return (
+              <div key={m.user_id} className="cw-member-row">
+                <div
+                  className="cw-member-avatar"
+                  style={{ background: avatarColor(name) }}
+                >
+                  {name[0]?.toUpperCase()}
+                </div>
+                <span className="cw-member-name">{name}</span>
+                {isYou && <span className="cw-member-you">you</span>}
+              </div>
+            )
+          })}
+
+          <hr className="cw-drawer-divider" />
+          <div className="cw-drawer-section-label">Invite by Email</div>
+          <input
+            className="cw-inv-input"
+            type="email"
+            placeholder="Enter email address"
+            value={emailInput}
+            onChange={(e) => {
+              setEmailInput(e.target.value)
+              setFoundUser(null)
+              setMsg(null)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleLookup()
+            }}
+            disabled={looking || sending}
+          />
+          <button
+            className="cw-inv-lookup-btn"
+            onClick={handleLookup}
+            disabled={!emailInput.trim() || looking || sending}
+          >
+            {looking ? 'Looking up...' : 'Look Up User'}
+          </button>
+          {foundUser && (
+            <>
+              <div className="cw-inv-found">Found: <strong>{foundUser.display_name}</strong></div>
+              <button className="cw-inv-send-btn" onClick={handleInvite} disabled={sending}>
+                {sending ? 'Sending...' : 'Send Invite'}
+              </button>
+            </>
+          )}
+          {msg && <div className={`cw-inv-msg ${msg.type}`}>{msg.text}</div>}
+        </div>
       </div>
-    </div>
+    </>
+  )
+}
+
+function SoloConversationDrawer({ open, onClose, conversationId, title, onSaved }) {
+  const [name, setName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    if (!open) return
+    setName(title || 'New Conversation')
+    setErr('')
+  }, [open, title])
+
+  const handleSave = async () => {
+    const clean = name.trim()
+    if (!clean) {
+      setErr('Chat name cannot be empty.')
+      return
+    }
+
+    setSaving(true)
+    setErr('')
+
+    const { error } = await supabase
+      .from('conversations')
+      .update({ title: clean })
+      .eq('id', conversationId)
+
+    setSaving(false)
+
+    if (error) {
+      setErr(error.message || 'Failed to rename chat.')
+      return
+    }
+
+    onSaved?.(clean)
+    onClose()
+  }
+
+  if (!open) return null
+
+  return (
+    <>
+      <div
+        onClick={onClose}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 39,
+          background: 'rgba(0,0,0,0.18)',
+        }}
+      />
+      <div className={`cw-drawer${open ? '' : ' closed'}`}>
+        <div className="cw-drawer-header">
+          <span className="cw-drawer-title">Chat settings</span>
+          <button className="cw-drawer-close" onClick={onClose} aria-label="Close">
+            ×
+          </button>
+        </div>
+
+        <div className="cw-drawer-body">
+          <div className="cw-drawer-section-label">Rename chat</div>
+
+          <input
+            className="cw-inv-input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Conversation name"
+            disabled={saving}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSave()
+            }}
+          />
+
+          <div className="cw-modal-actions" style={{ justifyContent: 'flex-end', marginTop: '12px' }}>
+            <button className="cw-modal-btn" onClick={onClose} disabled={saving}>
+              Cancel
+            </button>
+            <button className="cw-modal-btn primary" onClick={handleSave} disabled={saving || !name.trim()}>
+              {saving ? 'Saving...' : 'Save changes'}
+            </button>
+          </div>
+
+          {err && <div className="cw-modal-error">{err}</div>}
+        </div>
+      </div>
     </>
   )
 }
@@ -1399,7 +1826,7 @@ function PreferencesModal({ open, onClose, user, members }) {
   )
 }
 
-export default function ChatWindow({ user, conversationId, isGroup, onBack }) {
+export default function ChatWindow({ user, conversationId, isGroup, onBack, refreshToken, onConversationChanged }) {
   const [messages, setMessages] = useState([])
   const [inputText, setInputText] = useState('')
   const [isThinking, setIsThinking] = useState(false)
@@ -1442,8 +1869,8 @@ export default function ChatWindow({ user, conversationId, isGroup, onBack }) {
     setTodosOpen(false)
     setLoadingMessages(true)
     fetchMessages()
-    if (isGroup) fetchGroupContext()
-  }, [conversationId, isGroup])
+    fetchConversationContext()
+  }, [conversationId, isGroup, refreshToken])
 
   useEffect(() => {
     if (!conversationId) return
@@ -1480,14 +1907,22 @@ export default function ChatWindow({ user, conversationId, isGroup, onBack }) {
     }
   }
 
-  const fetchGroupContext = async () => {
+  const fetchConversationContext = async () => {
     const [convRes, membersRes, profileRes] = await Promise.all([
-      supabase.from('conversations').select('group_name').eq('id', conversationId).single(),
-      supabase.rpc('get_group_members', { p_conversation_id: conversationId }),
+      supabase
+        .from('conversations')
+        .select('title, group_name, group_avatar_url')
+        .eq('id', conversationId)
+        .single(),
+      isGroup
+        ? supabase.rpc('get_group_members', { p_conversation_id: conversationId })
+        : Promise.resolve({ data: null, error: null }),
       supabase.from('user_profiles').select('display_name').eq('id', user.id).maybeSingle(),
     ])
+
     if (!convRes.error && convRes.data) setGroupMeta(convRes.data)
-    if (!membersRes.error && membersRes.data) {
+
+    if (isGroup && !membersRes.error && membersRes.data) {
       const baseMembers = membersRes.data.map((m) => ({ user_id: m.user_id, display_name: m.display_name ?? null }))
       const ids = baseMembers.map((m) => m.user_id).filter(Boolean)
       const { data: profiles } = ids.length
@@ -1496,13 +1931,17 @@ export default function ChatWindow({ user, conversationId, isGroup, onBack }) {
             .select('id,display_name,avatar_url,budget,destination,trip_style,pace_morning,pace_evening,activity_style,downtime,accommodation,dietary')
             .in('id', ids)
         : { data: [] }
+
       const profilesById = new Map((profiles || []).map((p) => [p.id, p]))
-      setMembers(baseMembers.map((m) => ({
-        ...m,
-        ...(profilesById.get(m.user_id) || {}),
-        display_name: profilesById.get(m.user_id)?.display_name ?? m.display_name ?? null,
-      })))
+      setMembers(
+        baseMembers.map((m) => ({
+          ...m,
+          ...(profilesById.get(m.user_id) || {}),
+          display_name: profilesById.get(m.user_id)?.display_name ?? m.display_name ?? null,
+        }))
+      )
     }
+
     setUserDisplayName(profileRes.data?.display_name ?? user.email.split('@')[0])
   }
 
@@ -1862,16 +2301,30 @@ export default function ChatWindow({ user, conversationId, isGroup, onBack }) {
             <div
               className="cw-header-clickable"
               onClick={() => {
-                if (!isGroup) return
                 setShowDrawer((v) => !v)
                 setShowPreferences(false)
               }}
-              title={isGroup ? 'View group info' : undefined}
-              style={{ cursor: isGroup ? 'pointer' : 'default' }}
+              title={isGroup ? 'View group info' : 'View chat info'}
+              style={{ cursor: 'pointer' }}
             >
-              <div className="cw-header-icon">{isGroup ? '👥' : '✈️'}</div>
+              <div className="cw-header-icon">
+                {isGroup ? (
+                  groupMeta?.group_avatar_url ? (
+                    <img
+                      src={groupMeta.group_avatar_url}
+                      alt={groupMeta.group_name || 'Group'}
+                    />
+                  ) : (
+                    '👥'
+                  )
+                ) : (
+                  '✈️'
+                )}
+              </div>
               <div className="cw-header-info">
-                <div className="cw-header-title">{isGroup ? groupName : 'Travel Agent'}</div>
+                <div className="cw-header-title">
+                  {isGroup ? (groupMeta?.group_name || 'Group Chat') : (groupMeta?.title || 'New Conversation')}
+                </div>
                 {isGroup ? (
                   <div className="cw-header-sub-group">
                     {members.length > 0 ? `${members.length} member${members.length !== 1 ? 's' : ''}` : 'Group'}
@@ -1889,9 +2342,10 @@ export default function ChatWindow({ user, conversationId, isGroup, onBack }) {
                 <button
                   className="cw-todos-btn"
                   onClick={() => setTodosOpen(true)}
-                  title="To-dos"
+                  title="To-do's"
                 >
-                  ✅ <span className="cw-todos-badge">{openTodoCount}</span>
+                  To-do's
+                  <span className="cw-todos-badge">{openTodoCount}</span>
                 </button>
                 <button
                   className="cw-pref-btn"
@@ -2047,13 +2501,26 @@ export default function ChatWindow({ user, conversationId, isGroup, onBack }) {
         </div>
 
         {/* ── Members / Invite drawer ── */}
-        {isGroup && (
+        {isGroup ? (
           <MembersDrawer
             open={showDrawer}
             onClose={() => setShowDrawer(false)}
             conversationId={conversationId}
             user={user}
             members={members}
+            userDisplayName={userDisplayName}
+            messages={messages}
+            groupName={groupMeta?.group_name ?? ''}
+            groupAvatarUrl={groupMeta?.group_avatar_url ?? ''}
+            onGroupUpdated={() => onConversationChanged?.()}
+          />
+        ) : (
+          <SoloConversationDrawer
+            open={showDrawer}
+            onClose={() => setShowDrawer(false)}
+            conversationId={conversationId}
+            title={groupMeta?.title ?? 'New Conversation'}
+            onSaved={() => onConversationChanged?.()}
           />
         )}
         {isGroup && (
@@ -2104,6 +2571,9 @@ export default function ChatWindow({ user, conversationId, isGroup, onBack }) {
             members={members}
             userDisplayName={userDisplayName || user.email.split('@')[0]}
             messages={messages}
+            groupName={groupMeta?.group_name ?? ''}
+            groupAvatarUrl={groupMeta?.group_avatar_url ?? ''}
+            onGroupUpdated={() => onConversationChanged?.()}
           />
         )}
       </div>

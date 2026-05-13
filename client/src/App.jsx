@@ -30,6 +30,7 @@ export default function App() {
   const [activeConversation, setActiveConversation] = useState(null)
   const [activeView, setActiveView] = useState('chat') // 'chat' | 'itinerary'
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+  const [refreshToken, setRefreshToken] = useState(0)
   const resolving = useRef(false)
 
   // Mobile detection — must be at top level, not inside conditionals
@@ -133,10 +134,15 @@ export default function App() {
     setActiveView('chat')
   }
 
+  const bumpRefreshToken = () => {
+    setRefreshToken((v) => v + 1)
+  }
+
   // Derived layout flags
   const hasActivePanel = !!activeConversation
   const showSidebar = !isMobile || !hasActivePanel
   const showPanel = !isMobile || hasActivePanel
+  const sidebarWidth = isMobile ? '100%' : 'clamp(320px, 28vw, 420px)'
 
   if (appState === 'loading') {
     return (
@@ -181,8 +187,10 @@ export default function App() {
         {/* Sidebar — full screen on mobile when no panel is active */}
         {showSidebar && (
           <div style={{
-            width: isMobile ? '100%' : 'auto',
-            flex: isMobile ? '1' : 'none',
+            width: sidebarWidth,
+            flex: isMobile ? '1 1 auto' : `0 0 ${sidebarWidth}`,
+            minWidth: isMobile ? 0 : '320px',
+            maxWidth: isMobile ? '100%' : '300px',
             overflow: 'hidden',
             height: '100%',
           }}>
@@ -193,6 +201,8 @@ export default function App() {
               onSelect={handleSelectConversation}
               onNew={handleNewConversation}
               onOpenItinerary={handleOpenItinerary}
+              refreshToken={refreshToken}
+              onConversationChanged={bumpRefreshToken}
             />
           </div>
         )}
@@ -243,6 +253,8 @@ export default function App() {
                   conversationId={activeConversation.id}
                   isGroup={activeConversation.isGroup ?? false}
                   onBack={isMobile ? handleBackToList : undefined}
+                  refreshToken={refreshToken}
+                  onConversationChanged={bumpRefreshToken}
                 />
               )
             ) : (
